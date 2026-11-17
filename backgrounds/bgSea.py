@@ -2,6 +2,10 @@ import pygame
 import random
 import math
 
+# NOTE:
+# This file can be executed directly (python backgrounds/bgSea.py).
+# It is also launched from backgrounds/bgStart.py via runpy.run_path(...).
+
 class UnderwaterBackground:
     def __init__(self, w, h, seed=1, fish_count=16, jelly_count=6):
         self.w = w
@@ -352,6 +356,7 @@ if __name__ == "__main__":
     pygame.init()
     W, H = 960, 540
     screen = pygame.display.set_mode((W, H))
+    pygame.display.set_caption("Sea")
     clock = pygame.time.Clock()
     bg = UnderwaterBackground(W, H, seed=9, fish_count=18, jelly_count=6)
 
