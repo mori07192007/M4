@@ -180,9 +180,14 @@ class Virus:
         self.blink_progress = 0.0
 
         # 見た目バリエーション（同じ見た目にならない）
-        self.style = random.choice(["sheet", "smile", "shy", "fang"])
-        self.eye_style = random.choice(["dot", "oval", "star"])
+        self.style = random.choice(["happy", "sleepy", "grin", "wink"])
+        self.eye_style = random.choice(["dot", "oval"])  # 目は少なめにして可愛さ安定
         self.float_amp = random.uniform(2.0, 5.0) * (0.7 + 0.4 * self.size)
+
+        # トゲ（控えめ、数と長さを個体差に）
+        self.spike_count = random.randint(6, 10)
+        self.spike_len = random.uniform(7.0, 12.0) * (0.8 + 0.4 * self.size)
+        self.spike_phase = random.uniform(0.0, math.tau)
 
         # プレイヤーに向けて菌/炎を撃つ（一定間隔）
         self.shot_cd = random.uniform(0.9, 1.8)  # 初回は少しバラす
@@ -341,21 +346,21 @@ class Virus:
         # 丸い“ウイルス”感は減らして、かわいい敵キャラっぽいシルエットにする
         r = min(self.w, self.h) * 0.45
 
-        # --- おばけ系（かわいめ・オリジナル） ---
-        # tierは色の濃淡に使う（強さはHP/弾数/発射頻度）
+        # --- ウイルス系（かわいめ・オリジナル） ---
+        # 丸ベース + 控えめトゲ + 目口（個体差）で「形を凝る」
         body = {
-            "S": (235, 245, 255),
-            "M": (210, 235, 255),
-            "L": (190, 225, 255),
-        }.get(self.tier, (210, 235, 255))
-        outline = (45, 55, 70)
-        cheek = (255, 165, 190)
+            "S": (160, 245, 200),
+            "M": (255, 230, 150),
+            "L": (255, 175, 175),
+        }.get(self.tier, (160, 245, 200))
+        outline = (40, 45, 55)
+        cheek = (255, 135, 170)
 
         # ひるみ中は明るく点滅
         if getattr(self, "hurt_timer", 0.0) > 0:
             body = (min(255, body[0] + 45), min(255, body[1] + 45), min(255, body[2] + 45))
 
-        # ふわふわ（上下浮遊） + ぷるぷる
+        # ふわふわ（上下） + ぷるぷる
         pulse = 1.0 + math.sin(GLOBAL_T * 2.2 + self.anim_phase) * 0.04
         bob = math.sin(GLOBAL_T * 1.3 + self.anim_phase) * self.float_amp
 
@@ -365,63 +370,71 @@ class Virus:
         br = int(r * 1.05)
         rr = int(br * sx * pulse)
 
-        # おばけ本体（丸 + 下のひらひら）
-        # 上半分：丸
-        pygame.draw.circle(surf, outline, (int(px), int(py - rr * 0.20)), rr + 4)
-        pygame.draw.circle(surf, body, (int(px), int(py - rr * 0.20)), rr)
+        # トゲ（先に外側へ描く）
+        spike_col = (90, 110, 110)
+        for i in range(self.spike_count):
+            a = (math.tau * i / self.spike_count) + self.spike_phase + math.sin(GLOBAL_T * 1.1 + self.anim_phase) * 0.05
+            x1 = px + math.cos(a) * (rr * 0.75)
+            y1 = py + math.sin(a) * (rr * 0.75)
+            x2 = px + math.cos(a) * (rr * 0.75 + self.spike_len)
+            y2 = py + math.sin(a) * (rr * 0.75 + self.spike_len)
+            pygame.draw.line(surf, spike_col, (x1, y1), (x2, y2), 3)
+            pygame.draw.circle(surf, spike_col, (int(x2), int(y2)), 3)
 
-        # 下半分：ひらひら（3つの丸で簡単に）
-        flap_y = int(py + rr * 0.55)
-        flap_r = max(5, int(rr * 0.42))
-        for i in (-1, 0, 1):
-            fx = int(px + i * flap_r * 1.05)
-            pygame.draw.circle(surf, outline, (fx, flap_y), flap_r + 3)
-            pygame.draw.circle(surf, body, (fx, flap_y), flap_r)
+        # 本体（丸）
+        pygame.draw.circle(surf, outline, (int(px), int(py)), rr + 5)
+        pygame.draw.circle(surf, body, (int(px), int(py)), rr)
 
-        # しっぽ/シーツっぽい影
-        if self.style == "sheet":
-            shadow = (170, 205, 235)
-            pygame.draw.ellipse(
-                surf,
-                shadow,
-                pygame.Rect(int(px - rr * 0.60), int(py + rr * 0.10), int(rr * 1.20), int(rr * 0.95)),
-            )
+        # 内側の模様（個体差）
+        if self.style in ("sleepy", "wink"):
+            spot = (255, 255, 255)
+            pygame.draw.circle(surf, spot, (int(px - rr * 0.25), int(py + rr * 0.15)), max(4, int(rr * 0.18)))
+        elif self.style == "grin":
+            spot = (230, 255, 245)
+            pygame.draw.ellipse(surf, spot, pygame.Rect(int(px - rr * 0.45), int(py - rr * 0.05), int(rr * 0.35), int(rr * 0.22)))
 
-        # 顔（バリエーション）
-        face_col = (35, 40, 55)
-        ex_off = int(rr * 0.38)
-        ey = int(py - rr * 0.10)
-        eye_r = max(2, int(2.6 * self.size))
+        # 顔（かわいめ）
+        face_col = (25, 30, 40)
+        ex_off = int(rr * 0.34)
+        ey = int(py - rr * 0.12)
+        eye_r = max(2, int(2.7 * self.size))
 
-        # 瞬き中は目を線にする / 目スタイルで差を出す
+        # 目：瞬き中は線、winkは片目
+        left_closed = (self.style == "wink")
         if self.blink_progress > 0:
+            left_closed = True
+            right_closed = True
+        else:
+            right_closed = False
+
+        # 左目
+        if left_closed:
             pygame.draw.line(surf, face_col, (int(px - ex_off - eye_r), ey), (int(px - ex_off + eye_r), ey), 2)
-            pygame.draw.line(surf, face_col, (int(px + ex_off - eye_r), ey), (int(px + ex_off + eye_r), ey), 2)
         else:
             if self.eye_style == "oval":
                 pygame.draw.ellipse(surf, face_col, pygame.Rect(int(px - ex_off - 2), ey - 3, 4, 6))
-                pygame.draw.ellipse(surf, face_col, pygame.Rect(int(px + ex_off - 2), ey - 3, 4, 6))
-            elif self.eye_style == "star":
-                # 星っぽい（小十字）
-                for sgn in (-1, 1):
-                    ex = int(px + sgn * ex_off)
-                    pygame.draw.line(surf, face_col, (ex - 2, ey), (ex + 2, ey), 2)
-                    pygame.draw.line(surf, face_col, (ex, ey - 2), (ex, ey + 2), 2)
             else:
                 pygame.draw.circle(surf, face_col, (int(px - ex_off), ey), eye_r)
+
+        # 右目
+        if right_closed:
+            pygame.draw.line(surf, face_col, (int(px + ex_off - eye_r), ey), (int(px + ex_off + eye_r), ey), 2)
+        else:
+            if self.eye_style == "oval":
+                pygame.draw.ellipse(surf, face_col, pygame.Rect(int(px + ex_off - 2), ey - 3, 4, 6))
+            else:
                 pygame.draw.circle(surf, face_col, (int(px + ex_off), ey), eye_r)
 
-        # 口（スタイルで差）
+        # 口（happy/sleepy/grin）
         mx = int(px)
         my = int(py + rr * 0.18)
-        if self.style == "fang":
-            pygame.draw.line(surf, face_col, (mx - 6, my), (mx + 6, my), 2)
-            # 牙
-            pygame.draw.polygon(surf, face_col, [(mx - 2, my), (mx, my + 5), (mx + 2, my)])
-        elif self.style == "smile":
+        if self.style == "sleepy":
+            pygame.draw.arc(surf, face_col, pygame.Rect(mx - 7, my, 14, 10), math.pi * 1.10, math.pi * 1.90, 2)
+        elif self.style == "grin":
+            pygame.draw.line(surf, face_col, (mx - 7, my + 2), (mx + 7, my + 2), 2)
             pygame.draw.arc(surf, face_col, pygame.Rect(mx - 8, my - 2, 16, 10), math.pi * 0.10, math.pi * 0.90, 2)
         else:
-            pygame.draw.line(surf, face_col, (mx - 6, my), (mx + 6, my), 2)
+            pygame.draw.arc(surf, face_col, pygame.Rect(mx - 8, my - 2, 16, 10), math.pi * 0.10, math.pi * 0.90, 2)
 
         # ほっぺ（照れ：近いほど濃く）
         dist = getattr(self, "_player_dist", 9999.0)
@@ -435,7 +448,7 @@ class Virus:
         pygame.draw.circle(surf, blush, (int(px - rr * 0.58), int(py + rr * 0.05)), b_r)
         pygame.draw.circle(surf, blush, (int(px + rr * 0.58), int(py + rr * 0.05)), b_r)
 
-        # 足は無し（おばけなので）
+        # 足は無し（ウイルスなので）
 
 # =========================================================
 # Player
