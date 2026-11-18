@@ -9,6 +9,9 @@ import pygame
 W, H = 960, 540
 FPS = 60
 
+# 表情・揺れ用（簡単なアニメ）
+GLOBAL_T = 0.0
+
 GROUND_Y = 460
 GRAVITY = 1200.0
 
@@ -261,6 +264,12 @@ class Virus:
         self.death_timer = 0.0
         self.remove = False
 
+        # アニメ用
+        self.anim_phase = random.uniform(0.0, math.tau)
+        self.blink_t = random.uniform(0.4, 2.0)  # 次の瞬きまで
+        self.blink_len = 0.10  # 瞬き時間
+        self.blink_progress = 0.0
+
         # プレイヤーに向けて菌/炎を撃つ（一定間隔）
         self.shot_cd = random.uniform(0.9, 1.8)  # 初回は少しバラす
         # ちょっと投げすぎ感が出ないように間隔を広げる
@@ -352,6 +361,15 @@ class Virus:
                 self.explode(projectiles, theme=theme)
                 self.remove = True
             return
+
+        # 瞬き（アニメ）
+        if self.blink_progress > 0:
+            self.blink_progress = max(0.0, self.blink_progress - dt)
+        else:
+            self.blink_t -= dt
+            if self.blink_t <= 0:
+                self.blink_progress = self.blink_len
+                self.blink_t = random.uniform(1.2, 3.2)
 
         # プレイヤーへ向けて発射（生存中のみ）
         if player is not None:
@@ -463,6 +481,11 @@ class Virus:
         if getattr(self, "hurt_timer", 0.0) > 0:
             body = (min(255, body[0] + 45), min(255, body[1] + 45), min(255, body[2] + 45))
 
+        # ぷるぷる（呼吸みたいに脈動） + 耳が少し揺れる
+        # NOTE: 既存ゲームっぽい“タメ”より、ゆるキャラの「もにょもにょ」感
+        pulse = 1.0 + math.sin(GLOBAL_T * 2.2 + self.anim_phase) * 0.04
+        ear_sway = math.sin(GLOBAL_T * 1.6 + self.anim_phase * 0.7) * (2.0 + 1.0 * self.size)
+
         px = cx - cam_x
         py = cy
 
@@ -473,7 +496,7 @@ class Virus:
         ear_y = int(py - br * 0.65)
         ear_x_off = int(br * 0.55)
         for sgn in (-1, 1):
-            ex = int(px + sgn * ear_x_off)
+            ex = int(px + sgn * ear_x_off + sgn * ear_sway)
             # 外枠
             pygame.draw.circle(surf, outline, (ex, ear_y), ear_r + 3)
             pygame.draw.circle(surf, body, (ex, ear_y), ear_r)
@@ -482,12 +505,12 @@ class Virus:
             pygame.draw.circle(surf, inner, (ex, ear_y), max(2, int(ear_r * 0.55)))
 
         # 体（丸）
-        pygame.draw.circle(surf, outline, (int(px), int(py)), int(br * sx) + 4)
-        pygame.draw.circle(surf, body, (int(px), int(py)), int(br * sx))
+        pygame.draw.circle(surf, outline, (int(px), int(py)), int(br * sx * pulse) + 4)
+        pygame.draw.circle(surf, body, (int(px), int(py)), int(br * sx * pulse))
 
         # お腹（やさしい楕円）
-        belly_w = int(br * 1.10)
-        belly_h = int(br * 0.85)
+        belly_w = int(br * 1.10 * pulse)
+        belly_h = int(br * 0.85 * pulse)
         belly_rect = pygame.Rect(0, 0, belly_w, belly_h)
         belly_rect.center = (int(px), int(py + br * 0.25))
         pygame.draw.ellipse(surf, belly, belly_rect)
@@ -497,8 +520,14 @@ class Virus:
         ex_off = int(br * 0.36)
         ey = int(py - br * 0.12)
         eye_r = max(2, int(2.5 * self.size))
-        pygame.draw.circle(surf, face_col, (int(px - ex_off), ey), eye_r)
-        pygame.draw.circle(surf, face_col, (int(px + ex_off), ey), eye_r)
+
+        # 瞬き中は目を線にする
+        if self.blink_progress > 0:
+            pygame.draw.line(surf, face_col, (int(px - ex_off - eye_r), ey), (int(px - ex_off + eye_r), ey), 2)
+            pygame.draw.line(surf, face_col, (int(px + ex_off - eye_r), ey), (int(px + ex_off + eye_r), ey), 2)
+        else:
+            pygame.draw.circle(surf, face_col, (int(px - ex_off), ey), eye_r)
+            pygame.draw.circle(surf, face_col, (int(px + ex_off), ey), eye_r)
 
         # 鼻（三角じゃなく丸いおにぎり風）
         nose_col = (85, 65, 75)
@@ -613,10 +642,12 @@ def main():
 
     spawned_segments = set()
 
+    global GLOBAL_T
     running = True
     while running:
         dt = clock.tick(FPS) / 1000.0
         dt = min(dt, 1/20)
+        GLOBAL_T += dt
 
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
