@@ -538,7 +538,7 @@ def main():
                 happyend_bg = EndRollScreen(W, H)
                 scene = SCENE_HAPPYEND
 
-            # Universe stage GAME OVER -> wait 3 seconds -> START
+            # Universe stage GAME OVER -> wait 3 seconds (keep the same screen) -> START
             if coll_state3.get("pc_hp", 1) <= 0:
                 if gameover_return_timer is None:
                     gameover_return_timer = 3.0
@@ -586,15 +586,15 @@ def main():
                 elif e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
                     running = False
                 elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
-                    # allow click to return to start
-                    scene = SCENE_START
+                    # allow click to finish immediately
+                    running = False
 
             happyend_bg.update(dt)
             happyend_bg.draw(screen)
 
             # When end roll finishes, return to START.
             if getattr(happyend_bg, "finished", False):
-                scene = SCENE_START
+                running = False
 
             pygame.display.flip()
 
