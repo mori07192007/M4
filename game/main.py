@@ -9,6 +9,8 @@ from game.player.player_stub import PlayerStub
 # Use the latest/active one here.
 from game.backgrounds.bgStart import StartScreenNeoFuturistic
 from game.backgrounds.bgSea import UnderwaterBackground
+from game.backgrounds.bgUniverse import Background as UniverseBackground
+from game.backgrounds.bgHappyend import EndRollScreen
 
 # NOTE:
 # The original flow was:
@@ -22,6 +24,8 @@ import runpy
 from pathlib import Path
 from game.backgrounds.bgSchool import CampusBackground
 from game.backgrounds.layer1_2 import SeaToSchoolTransitionBackground
+from game.backgrounds.layer2_3 import SchoolToUniverseTransitionBackground
+from game.collision import collision as collision_game
 
 
 # ---- shared config ----
@@ -99,7 +103,17 @@ def main():
     SCENE_SEA = "sea"
     SCENE_TRANSITION_1_2 = "transition_1_2"
     SCENE_SCHOOL = "school"
+    SCENE_TRANSITION_2_3 = "transition_2_3"
+    SCENE_UNIVERSE = "universe"
+    SCENE_HAPPYEND = "happyend"
     scene = SCENE_START
+
+    # When collision game ends with GAME OVER, wait 3 seconds then go back to START.
+    gameover_return_timer = None  # None or seconds remaining
+    # When collision game is cleared, wait 3 seconds then go to the layer1->2 transition.
+    clear_to_transition_timer = None  # None or seconds remaining
+    # When collision game is cleared in stage-2, wait 3 seconds then go to layer2->3 transition.
+    clear2_to_transition_timer = None
 
     # ---- background instances (lowest layer) ----
     # NOTE:
@@ -121,7 +135,43 @@ def main():
         diagram_scale=1.25,
         text_scale=1.35,
     )
+    trans_2_3 = SchoolToUniverseTransitionBackground(
+        W,
+        H,
+        seed=5,
+        duration=10.0,
+        diagram_hold_mult=3.0,
+        diagram_center=True,
+        diagram_center_y=0.44,
+        text_scale=1.35,
+        diagram_scale=1.25,
+        show_text=True,
+        show_diagram=True,
+        diagram_simple=True,
+    )
     school_bg = CampusBackground(W, H, seed=3)
+    universe_bg = UniverseBackground(W, H, scroll_dir="left")
+    happyend_bg = EndRollScreen(W, H)
+
+    # ---- collision mini-game (runs on top of bgSea) ----
+    # collision.py was originally a standalone pygame script.
+    # We initialize it for our window size and call step_collision() per-frame.
+    collision_game.init_collision(W, H)
+    # collision uses an image file for the player sprite.
+    # Load it once here (path relative to this file).
+    try:
+        # Asset is stored at the M4 project root (confirmed: /home/moe7514/M4/player_idle.png)
+        player_img_path = Path(__file__).resolve().parents[1] / "player_idle.png"
+        collision_game.player_img = pygame.image.load(str(player_img_path))
+        collision_game.player_img = pygame.transform.scale(collision_game.player_img, (80, 80))
+    except FileNotFoundError:
+        # Fallback: simple rect surface if asset is missing.
+        surf = pygame.Surface((80, 80), pygame.SRCALPHA)
+        pygame.draw.rect(surf, (255, 220, 60), (0, 0, 80, 80), border_radius=10)
+        pygame.draw.circle(surf, (20, 20, 30), (28, 30), 6)
+        pygame.draw.circle(surf, (20, 20, 30), (52, 30), 6)
+        collision_game.player_img = surf
+    collision_game._reset_game_state()
 
     player = PlayerStub(x=80.0, ground_y=GROUND_Y)
     enemies = []
@@ -146,6 +196,10 @@ def main():
         # Scene: START (bgStart)
         # -----------------------
         if scene == SCENE_START:
+            # If we came back from game over, ensure collision game state is reset.
+            gameover_return_timer = None
+            clear_to_transition_timer = None
+            clear2_to_transition_timer = None
             # Start screen updates/draws only. No player/enemy updates.
             start_screen.update(dt)
 
@@ -161,6 +215,9 @@ def main():
                     projectiles = []
                     spawned_segments = set()
                     global_t = 0.0
+                    collision_game._reset_game_state()
+                    clear_to_transition_timer = None
+                    clear2_to_transition_timer = None
 
             # draw
             start_screen.draw(screen)
@@ -191,66 +248,109 @@ def main():
         # -----------------------
         # Scene: SEA (bgSea)
         # -----------------------
-        player.update(dt, keys, gravity=GRAVITY, world_w=WORLD_W)
+        # NOTE: If collision game is in GAME OVER countdown, freeze the platformer side
+        # (player/enemies/projectiles) but keep drawing it as-is under the overlays.
 
-        cam_x = clamp(player.x - W * 0.40, 0, WORLD_W - W)
-
-        seg = segment_index(player.x)
-        theme = theme_for_segment(seg)
-
-        if seg not in spawned_segments:
-            spawned_segments.add(seg)
-            enemies.extend(spawn_for_segment(seg, ground_y=GROUND_Y))
-
-        # update enemies
-        for en in enemies:
-            en.update(
-                dt,
-                projectiles,
-                global_t=global_t,
-                theme_palette=theme.get("palette"),
-                player=player,
-                ground_y=GROUND_Y,
-            )
-        enemies = [e for e in enemies if not e.remove]
-
-        # stomp collision
-        px, py, pw, ph = player.rect()
-        for en in enemies:
-            if en.dead:
-                continue
-            if not aabb(px, py, pw, ph, en.x, en.y, en.w, en.h):
-                continue
-
-            player_falling = player.vy > 0
-            enemy_top = en.y
-            player_bottom_prev = (player.y - player.vy * (1/60.0)) + player.h
-            stomped = player_falling and player_bottom_prev <= enemy_top + 12
-
-            if stomped:
-                en.stomped()
-                player.vy = -360.0
-            else:
-                player.vx = (-1 if player.x < en.x else 1) * 260.0
-                player.vy = -260.0
-
-        # update projectiles
-        for b in projectiles:
-            b.update(dt, GROUND_Y)
-        projectiles = [b for b in projectiles if b.life > 0]
-
-        # draw (background -> characters -> UI)
+        # draw (background -> collision game -> characters -> UI)
         # 1) far background (lowest layer)
         #    NOTE: background modules are screen-space, not world-space, so we don't apply cam_x.
         sea_bg.update(dt)
         sea_bg.draw(screen)
 
-        # ---- stage clear condition (temporary) ----
-        # PlayerStub does not have built-in clear/gameover rules.
-        # For now, we treat reaching the end of the world as "clear".
-        if player.x >= WORLD_W - player.w - 2:
-            scene = SCENE_TRANSITION_1_2
-            trans_1_2.restart()
+        # 2) collision mini-game runs while bgSea is active
+        #    (collision draws without clearing the background)
+        coll_state = collision_game.step_collision(dt, events, keys, screen, draw_background=False)
+
+        # If collision game is in GAME OVER state, start a 3-second countdown.
+        # During the countdown we keep showing the sea background + the game-over overlay.
+        if coll_state.get("pc_hp", 1) <= 0:
+            if gameover_return_timer is None:
+                gameover_return_timer = 3.0
+
+        # If collision game is CLEAR, start a 3-second countdown to the layer1->2 transition.
+        if coll_state.get("game_clear"):
+            if clear_to_transition_timer is None:
+                clear_to_transition_timer = 3.0
+
+        # Freeze platformer side during either countdown.
+        platformer_frozen = (gameover_return_timer is not None) or (clear_to_transition_timer is not None)
+
+        if not platformer_frozen:
+            player.update(dt, keys, gravity=GRAVITY, world_w=WORLD_W)
+            player_x_for_cam = float(player.x)
+
+            cam_x = clamp(player_x_for_cam - W * 0.40, 0, WORLD_W - W)
+
+            seg = segment_index(player_x_for_cam)
+            theme = theme_for_segment(seg)
+
+            if seg not in spawned_segments:
+                spawned_segments.add(seg)
+                enemies.extend(spawn_for_segment(seg, ground_y=GROUND_Y))
+
+            # update enemies
+            for en in enemies:
+                en.update(
+                    dt,
+                    projectiles,
+                    global_t=global_t,
+                    theme_palette=theme.get("palette"),
+                    player=player,
+                    ground_y=GROUND_Y,
+                )
+            enemies = [e for e in enemies if not e.remove]
+
+            # update projectiles
+            for b in projectiles:
+                b.update(dt, GROUND_Y)
+            projectiles = [b for b in projectiles if b.life > 0]
+        else:
+            # safe defaults for draw/UI if frozen
+            player_x_for_cam = float(getattr(player, "x", 0.0))
+            cam_x = clamp(player_x_for_cam - W * 0.40, 0, WORLD_W - W)
+            seg = segment_index(player_x_for_cam)
+            theme = theme_for_segment(seg)
+
+        # While counting down, show a simple overlay and return to start when done.
+        if gameover_return_timer is not None:
+            gameover_return_timer -= dt
+            overlay = pygame.Surface((W, H), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 120))
+            screen.blit(overlay, (0, 0))
+            msg = font.render(f"Returning to Start in {max(0.0, gameover_return_timer):.1f}s", True, (255, 255, 255))
+            screen.blit(msg, (18, 40))
+            if gameover_return_timer <= 0:
+                scene = SCENE_START
+                collision_game._reset_game_state()
+                # (optional) also reset platformer-ish state
+                player = PlayerStub(x=80.0, ground_y=GROUND_Y)
+                enemies = []
+                projectiles = []
+                spawned_segments = set()
+                global_t = 0.0
+                # ensure countdown is cleared
+                gameover_return_timer = None
+
+        # While counting down after CLEAR, keep the screen as-is and then move to transition.
+        if clear_to_transition_timer is not None:
+            clear_to_transition_timer -= dt
+            overlay = pygame.Surface((W, H), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 90))
+            screen.blit(overlay, (0, 0))
+            msg = font.render(
+                f"CLEAR! Moving to next stage in {max(0.0, clear_to_transition_timer):.1f}s",
+                True,
+                (255, 255, 255),
+            )
+            screen.blit(msg, (18, 66))
+            if clear_to_transition_timer <= 0:
+                scene = SCENE_TRANSITION_1_2
+                trans_1_2.restart()
+                clear_to_transition_timer = None
+
+        # NOTE:
+        # Transition to layer1-2 is triggered ONLY by the collision mini-game clear now.
+        # (We no longer transition when the platformer player reaches the end of the world.)
 
         # 2) (optional) debug overlay
         # If you want debug segment/grid lines back, re-enable this block.
@@ -262,6 +362,7 @@ def main():
             en.draw(screen, cam_x, global_t=global_t)
         for b in projectiles:
             b.draw(screen, cam_x)
+
         player.draw(screen, cam_x)
 
         txt = font.render(
@@ -290,6 +391,12 @@ def main():
             pygame.display.flip()
 
             if trans_1_2.is_done():
+                # After leaving the transition, start stage-2 (bgSchool) and restart collision
+                # mini-game from a fresh state.
+                collision_game._reset_game_state()
+                gameover_return_timer = None
+                clear_to_transition_timer = None
+                clear2_to_transition_timer = None
                 scene = SCENE_SCHOOL
 
         # -----------------------
@@ -298,7 +405,8 @@ def main():
         while running and scene == SCENE_SCHOOL:
             dt = clock.tick(FPS) / 1000.0
             dt = min(dt, 1 / 20)
-            for e in pygame.event.get():
+            events2 = pygame.event.get()
+            for e in events2:
                 if e.type == pygame.QUIT:
                     running = False
                 elif e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
@@ -308,10 +416,186 @@ def main():
             school_bg.update(dt, speed=85.0)
             school_bg.draw(screen)
 
+            # Run collision mini-game again on top of bgSchool (stage 2)
+            keys2 = pygame.key.get_pressed()
+            coll_state2 = collision_game.step_collision(dt, events2, keys2, screen, draw_background=False)
+
+            # Stage-2 CLEAR handling: wait 3 seconds, then go to layer2->3 transition.
+            if coll_state2.get("game_clear"):
+                if clear2_to_transition_timer is None:
+                    clear2_to_transition_timer = 3.0
+
+            # Stage-2 GAME OVER handling: wait 3 seconds, then return to START.
+            if coll_state2.get("pc_hp", 1) <= 0:
+                if gameover_return_timer is None:
+                    gameover_return_timer = 3.0
+
+            if gameover_return_timer is not None:
+                gameover_return_timer -= dt
+                overlay = pygame.Surface((W, H), pygame.SRCALPHA)
+                overlay.fill((0, 0, 0, 120))
+                screen.blit(overlay, (0, 0))
+                msg = font.render(
+                    f"Returning to Start in {max(0.0, gameover_return_timer):.1f}s",
+                    True,
+                    (255, 255, 255),
+                )
+                screen.blit(msg, (18, 40))
+                if gameover_return_timer <= 0:
+                    scene = SCENE_START
+                    collision_game._reset_game_state()
+                    # reset platformer-ish state too
+                    player = PlayerStub(x=80.0, ground_y=GROUND_Y)
+                    enemies = []
+                    projectiles = []
+                    spawned_segments = set()
+                    global_t = 0.0
+                    gameover_return_timer = None
+                    clear_to_transition_timer = None
+                    clear2_to_transition_timer = None
+
+            if clear2_to_transition_timer is not None:
+                clear2_to_transition_timer -= dt
+                overlay = pygame.Surface((W, H), pygame.SRCALPHA)
+                overlay.fill((0, 0, 0, 90))
+                screen.blit(overlay, (0, 0))
+                msg = font.render(
+                    f"CLEAR! Moving to next stage in {max(0.0, clear2_to_transition_timer):.1f}s",
+                    True,
+                    (255, 255, 255),
+                )
+                screen.blit(msg, (18, 66))
+                if clear2_to_transition_timer <= 0:
+                    scene = SCENE_TRANSITION_2_3
+                    trans_2_3.restart()
+                    # reset collision so it does not keep CLEAR state into the transition
+                    collision_game._reset_game_state()
+                    gameover_return_timer = None
+                    clear_to_transition_timer = None
+                    clear2_to_transition_timer = None
+
             # (optional) keep running the same gameplay on top of bgSchool.
             # For now, just show the stage label.
             txt2 = font.render("STAGE 2 (School) - ESC to quit", True, (15, 15, 20))
             screen.blit(txt2, (18, 14))
+            pygame.display.flip()
+
+            # If we switched scenes during this frame, break out of the SCHOOL loop
+            # so the START scene can render immediately.
+            if scene != SCENE_SCHOOL:
+                break
+
+        # -----------------------
+        # Scene: TRANSITION 2->3 (layer2-3)
+        # -----------------------
+        while running and scene == SCENE_TRANSITION_2_3:
+            dt = clock.tick(FPS) / 1000.0
+            dt = min(dt, 1 / 20)
+            for e in pygame.event.get():
+                if e.type == pygame.QUIT:
+                    running = False
+                elif e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
+                    running = False
+
+            trans_2_3.update(dt)
+            trans_2_3.draw(screen)
+            pygame.display.flip()
+
+            if trans_2_3.is_done():
+                # Start Stage 3 (Universe)
+                collision_game._reset_game_state()
+                gameover_return_timer = None
+                clear_to_transition_timer = None
+                clear2_to_transition_timer = None
+                scene = SCENE_UNIVERSE
+
+        # -----------------------
+        # Scene: UNIVERSE (bgUniverse)
+        # -----------------------
+        while running and scene == SCENE_UNIVERSE:
+            dt = clock.tick(FPS) / 1000.0
+            dt = min(dt, 1 / 20)
+            events3 = pygame.event.get()
+            for e in events3:
+                if e.type == pygame.QUIT:
+                    running = False
+                elif e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
+                    running = False
+
+            universe_bg.update(dt)
+            universe_bg.draw(screen)
+
+            keys3 = pygame.key.get_pressed()
+            coll_state3 = collision_game.step_collision(dt, events3, keys3, screen, draw_background=False)
+
+            # Universe stage CLEAR -> go to happy end roll
+            if coll_state3.get("game_clear"):
+                collision_game._reset_game_state()
+                gameover_return_timer = None
+                clear_to_transition_timer = None
+                clear2_to_transition_timer = None
+                # restart end roll
+                happyend_bg = EndRollScreen(W, H)
+                scene = SCENE_HAPPYEND
+
+            # Universe stage GAME OVER -> wait 3 seconds -> START
+            if coll_state3.get("pc_hp", 1) <= 0:
+                if gameover_return_timer is None:
+                    gameover_return_timer = 3.0
+
+            if gameover_return_timer is not None:
+                gameover_return_timer -= dt
+                overlay = pygame.Surface((W, H), pygame.SRCALPHA)
+                overlay.fill((0, 0, 0, 120))
+                screen.blit(overlay, (0, 0))
+                msg = font.render(
+                    f"Returning to Start in {max(0.0, gameover_return_timer):.1f}s",
+                    True,
+                    (255, 255, 255),
+                )
+                screen.blit(msg, (18, 40))
+                if gameover_return_timer <= 0:
+                    scene = SCENE_START
+                    collision_game._reset_game_state()
+                    # reset platformer-ish state too
+                    player = PlayerStub(x=80.0, ground_y=GROUND_Y)
+                    enemies = []
+                    projectiles = []
+                    spawned_segments = set()
+                    global_t = 0.0
+                    gameover_return_timer = None
+                    clear_to_transition_timer = None
+                    clear2_to_transition_timer = None
+
+            txt3 = font.render("STAGE 3 (Universe) - ESC to quit", True, (240, 240, 255))
+            screen.blit(txt3, (18, 14))
+            pygame.display.flip()
+
+            if scene != SCENE_UNIVERSE:
+                break
+
+        # -----------------------
+        # Scene: HAPPY END (bgHappyend)
+        # -----------------------
+        while running and scene == SCENE_HAPPYEND:
+            dt = clock.tick(FPS) / 1000.0
+            dt = min(dt, 1 / 20)
+            for e in pygame.event.get():
+                if e.type == pygame.QUIT:
+                    running = False
+                elif e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
+                    running = False
+                elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+                    # allow click to return to start
+                    scene = SCENE_START
+
+            happyend_bg.update(dt)
+            happyend_bg.draw(screen)
+
+            # When end roll finishes, return to START.
+            if getattr(happyend_bg, "finished", False):
+                scene = SCENE_START
+
             pygame.display.flip()
 
     pygame.quit()
