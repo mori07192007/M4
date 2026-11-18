@@ -208,6 +208,9 @@ SPRAY_RADIUS = 6           # 弾の半径
 
 projectiles = []  # {"x","y","vx","vy","r"}
 
+# ウイルスがPC(左側)に向かってカーブして寄っていく強さ
+VIRUS_CURVE_STRENGTH = 0.06  # 大きいほどY方向に吸い寄せられる
+
 running = True
 game_clear = False
 
@@ -420,6 +423,14 @@ while running:
     for virus in viruses[:]:
         virus["x"] -= virus["speed"]
 
+        # PC（左側）に近づくようにY方向も少しずつ曲げる
+        # PCの中心を狙う：draw_pc(screen, 20, 230) のだいたい中心
+        pc_target_y = 230 + 60  # PC全体の中心っぽいY
+        dy = pc_target_y - virus["y"]
+        # 距離が遠いほどゆるく、近いほど強めに寄せる（簡易）
+        virus["y"] += dy * VIRUS_CURVE_STRENGTH
+        virus["y"] = max(40, min(virus["y"], HEIGHT - 40))
+
         if virus["x"] < 70:
             if virus["type"] == "boss":
                 pc_hp -= 30
@@ -427,6 +438,8 @@ while running:
                 pc_hp -= 15
             else:
                 pc_hp -= 10
+
+            viruses.remove(virus)
 
     if attack:
         attack_timer -= 1
