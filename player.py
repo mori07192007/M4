@@ -1,5 +1,6 @@
-import pygame
 import random
+import pygame
+import math
 
 pygame.init()
 
@@ -15,6 +16,86 @@ pygame.display.set_caption("大西先生 VS ウイルス")
 clock = pygame.time.Clock()
 font = pygame.font.Font(None, 40)
 big_font = pygame.font.Font(None, 80)
+
+# =========================
+# 図形で“絵っぽく”描く関数（画像ファイル不要）
+# =========================
+
+
+def draw_virus(surface, vtype, x, y):
+    """ウイルスを図形の組み合わせで描く（中心座標 x,y）"""
+    x = int(x)
+    y = int(y)
+
+    if vtype == "normal":
+        # 赤いトゲトゲ＋目
+        body_color = (230, 40, 40)
+        spike_color = (170, 0, 0)
+        r = 22
+
+        # トゲ（8方向）
+        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)]:
+            pygame.draw.line(surface, spike_color, (x, y), (x + dx * (r + 10), y + dy * (r + 10)), 3)
+
+        pygame.draw.circle(surface, body_color, (x, y), r)
+        pygame.draw.circle(surface, (255, 200, 200), (x - 6, y - 4), 5)
+        pygame.draw.circle(surface, (255, 200, 200), (x + 6, y - 4), 5)
+        pygame.draw.circle(surface, (0, 0, 0), (x - 6, y - 4), 2)
+        pygame.draw.circle(surface, (0, 0, 0), (x + 6, y - 4), 2)
+
+    elif vtype == "strong":
+        # 紫＋装甲っぽいリング
+        body_color = (170, 0, 255)
+        r = 24
+        pygame.draw.circle(surface, body_color, (x, y), r)
+        pygame.draw.circle(surface, (80, 0, 120), (x, y), r, 4)
+        pygame.draw.circle(surface, (240, 220, 255), (x - 7, y - 5), 5)
+        pygame.draw.circle(surface, (240, 220, 255), (x + 7, y - 5), 5)
+        pygame.draw.circle(surface, (0, 0, 0), (x - 7, y - 5), 2)
+        pygame.draw.circle(surface, (0, 0, 0), (x + 7, y - 5), 2)
+        pygame.draw.arc(surface, (0, 0, 0), (x - 10, y - 2, 20, 16), 3.6, 5.8, 2)
+
+    else:
+        # boss：黒い本体＋赤いコア
+        r = 34
+        pygame.draw.circle(surface, (10, 10, 10), (x, y), r)
+        pygame.draw.circle(surface, (60, 60, 60), (x, y), r, 4)
+        pygame.draw.circle(surface, (255, 30, 30), (x, y), 10)
+        pygame.draw.circle(surface, (255, 180, 180), (x - 10, y - 8), 6)
+        pygame.draw.circle(surface, (255, 180, 180), (x + 10, y - 8), 6)
+        pygame.draw.circle(surface, (0, 0, 0), (x - 10, y - 8), 2)
+        pygame.draw.circle(surface, (0, 0, 0), (x + 10, y - 8), 2)
+
+
+def draw_item(surface, itype, x, y):
+    """アイテムを図形の組み合わせで描く（左上座標 x,y / 40x40想定）"""
+    x = int(x)
+    y = int(y)
+
+    if itype == "patch":
+        # 回復：緑のメディカルキット＋白い十字
+        pygame.draw.rect(surface, (20, 160, 60), (x, y, 40, 40), border_radius=8)
+        pygame.draw.rect(surface, (10, 120, 45), (x, y, 40, 40), 3, border_radius=8)
+        # 十字
+        pygame.draw.rect(surface, (245, 245, 245), (x + 16, y + 8, 8, 24))
+        pygame.draw.rect(surface, (245, 245, 245), (x + 8, y + 16, 24, 8))
+
+    elif itype == "vaccine":
+        # ワクチン：注射器っぽい
+        pygame.draw.rect(surface, (250, 250, 250), (x + 8, y + 18, 24, 12), border_radius=4)
+        pygame.draw.rect(surface, (180, 180, 180), (x + 6, y + 20, 4, 8))
+        pygame.draw.rect(surface, (200, 200, 200), (x + 32, y + 20, 4, 8))
+        pygame.draw.line(surface, (120, 120, 120), (x + 36, y + 24), (x + 40, y + 24), 2)
+        pygame.draw.circle(surface, (255, 220, 0), (x + 16, y + 24), 3)
+
+    else:
+        # SSD：水色チップ
+        pygame.draw.rect(surface, (0, 200, 220), (x, y, 40, 40), border_radius=6)
+        pygame.draw.rect(surface, (0, 120, 140), (x, y, 40, 40), 3, border_radius=6)
+        pygame.draw.rect(surface, (200, 255, 255), (x + 10, y + 10, 20, 20), border_radius=4)
+        for i in range(5):
+            pygame.draw.line(surface, (0, 120, 140), (x + 6 + i * 7, y), (x + 6 + i * 7, y + 6), 2)
+            pygame.draw.line(surface, (0, 120, 140), (x + 6 + i * 7, y + 34), (x + 6 + i * 7, y + 40), 2)
 
 # =========================
 # プレイヤー
@@ -45,16 +126,13 @@ MAX_GAUGE = 5
 # ウイルス
 # =========================
 viruses = []
-
 spawn_timer = 0
-
 boss_spawned = False
 
 # =========================
 # アイテム
 # =========================
 items = []
-
 item_timer = 0
 
 vaccine_mode = False
@@ -68,38 +146,119 @@ ssd_timer = 0
 attack = False
 attack_timer = 0
 
+# =========================
+# スプレー攻撃（連射＋拡散）
+# =========================
+# スペースを押すと、一定時間「複数の弾」を前方にばら撒く（ショットガン/スプレー風）
+# 既存の黄色い攻撃矩形(attack_rect)は当たり判定に使っていたが、
+# ここでは弾（projectiles）で当たり判定を行う。
+SPRAY_DURATION_FRAMES = 14  # 1回の攻撃の継続フレーム（スペース押下でこの間スプレー）
+SPRAY_SHOTS_PER_FRAME = 2  # 1フレームあたりの発射数
+# 横に広がる（上下のブレを抑えた）スプレー
+# 角度で散らすより、上下方向の速度（vy）を小さくランダムに振る方が「横スプレー」っぽくなる。
+SPRAY_SPREAD_DEG = 1.0     # 角度ブレ（ほぼ一直線）
+SPRAY_VY_JITTER = 0.4      # 上下ブレ（ほぼ一直線）
+SPRAY_SPEED = 14           # 弾速
+SPRAY_RADIUS = 6           # 弾の半径
+
+projectiles = []  # {"x","y","vx","vy","r"}
+
 running = True
 game_clear = False
 
-while running:
+# =========================
+# タイトル（ルール説明）画面
+# =========================
 
+
+def draw_multiline_text(surface, text, x, y, font_obj, color=(0, 0, 0), line_gap=8):
+    """\n区切りの複数行テキストを描画する"""
+    yy = y
+    for line in text.split("\n"):
+        surface.blit(font_obj.render(line, True, color), (x, yy))
+        yy += font_obj.get_height() + line_gap
+
+
+def show_title_screen():
+    """クリックでゲーム開始するルール説明画面"""
+    waiting = True
+    while waiting:
+        clock.tick(60)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                raise SystemExit
+
+            # クリック or Enter/Space で開始
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                waiting = False
+            if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                waiting = False
+
+        screen.fill((220, 240, 255))
+
+        # タイトル
+        title_surf = big_font.render("大西先生 VS ウイルス", True, (0, 40, 120))
+        screen.blit(title_surf, (WIDTH // 2 - title_surf.get_width() // 2, 70))
+
+        # ルール説明
+        rules = (
+            "【操作】\n"
+            "・矢印キー：移動\n"
+            "・SPACE：攻撃（前方）\n"
+            "・ENTER：必殺技（ゲージMAXで全消し）\n"
+            "\n"
+            "【敵とポイント】\n"
+            "・赤ウイルス：HP1 / +1点\n"
+            "・紫ウイルス：HP2 / +3点（速い）\n"
+            "・BOSS：HP10 / 倒すとCLEAR（出現：スコア15）\n"
+            "※ウイルスが左端（PC）に到達するとHP減少\n"
+            "\n"
+            "【アイテム効果】\n"
+            "・PATCH：HP +20（最大100）\n"
+            "・ワクチン：10秒 攻撃範囲が広がる\n"
+            "・SSD：10秒 移動速度UP\n"
+            "\n"
+            "【必殺技】\n"
+            "・敵を倒すとゲージ+1（最大5）\n"
+            "・ゲージMAXでENTER → 画面上の敵を全消し"
+        )
+        draw_multiline_text(screen, rules, 110, 170, font, (0, 0, 0), line_gap=6)
+
+        # 開始案内（点滅）
+        if (pygame.time.get_ticks() // 500) % 2 == 0:
+            msg = font.render("クリックでスタート（Enter/SpaceでもOK）", True, (0, 0, 0))
+            screen.blit(msg, (WIDTH // 2 - msg.get_width() // 2, 520))
+
+        pygame.display.flip()
+
+
+show_title_screen()
+
+while running:
     clock.tick(60)
 
     # 難易度上昇
     game_time = pygame.time.get_ticks() // 1000
-
     speed_bonus = game_time // 60
 
     # ---------------------
     # イベント
     # ---------------------
     for event in pygame.event.get():
-
         if event.type == pygame.QUIT:
             running = False
 
         if event.type == pygame.KEYDOWN:
-
             # 通常攻撃
             if event.key == pygame.K_SPACE:
                 attack = True
-                attack_timer = 10
+                attack_timer = SPRAY_DURATION_FRAMES
 
             # 必殺技
             if event.key == pygame.K_RETURN:
-
                 if special_gauge >= MAX_GAUGE:
-
                     viruses.clear()
                     special_gauge = 0
 
@@ -129,40 +288,41 @@ while running:
     spawn_timer += 1
 
     if spawn_timer >= 60:
-
         r = random.randint(1, 100)
 
         if score >= 15 and not boss_spawned:
-
-            viruses.append({
-                "x": WIDTH,
-                "y": HEIGHT // 2,
-                "speed": 3,
-                "hp": 10,
-                "type": "boss"
-            })
-
+            viruses.append(
+                {
+                    "x": WIDTH,
+                    "y": HEIGHT // 2,
+                    "speed": 3,
+                    "hp": 10,
+                    "type": "boss",
+                }
+            )
             boss_spawned = True
 
         elif r <= 75:
-
-            viruses.append({
-                "x": WIDTH,
-                "y": random.randint(50, 550),
-                "speed": 4 + speed_bonus,
-                "hp": 1,
-                "type": "normal"
-            })
+            viruses.append(
+                {
+                    "x": WIDTH,
+                    "y": random.randint(50, 550),
+                    "speed": 4 + speed_bonus,
+                    "hp": 1,
+                    "type": "normal",
+                }
+            )
 
         else:
-
-            viruses.append({
-                "x": WIDTH,
-                "y": random.randint(50, 550),
-                "speed": 6 + speed_bonus,
-                "hp": 2,
-                "type": "strong"
-            })
+            viruses.append(
+                {
+                    "x": WIDTH,
+                    "y": random.randint(50, 550),
+                    "speed": 6 + speed_bonus,
+                    "hp": 2,
+                    "type": "strong",
+                }
+            )
 
         spawn_timer = 0
 
@@ -172,42 +332,29 @@ while running:
     item_timer += 1
 
     if item_timer >= 600:
+        item_type = random.choice(["patch", "vaccine", "ssd"])
 
-        item_type = random.choice(
-            ["patch", "vaccine", "ssd"]
+        items.append(
+            {
+                "x": WIDTH,
+                "y": random.randint(50, 550),
+                "type": item_type,
+            }
         )
-
-        items.append({
-            "x": WIDTH,
-            "y": random.randint(50, 550),
-            "type": item_type
-        })
 
         item_timer = 0
 
     # ---------------------
     # アイテム移動
     # ---------------------
-    player_rect = pygame.Rect(
-        player_x,
-        player_y,
-        80,
-        80
-    )
+    player_rect = pygame.Rect(player_x, player_y, 80, 80)
 
     for item in items[:]:
-
         item["x"] -= 4
 
-        item_rect = pygame.Rect(
-            item["x"],
-            item["y"],
-            40,
-            40
-        )
+        item_rect = pygame.Rect(item["x"], item["y"], 40, 40)
 
         if player_rect.colliderect(item_rect):
-
             if item["type"] == "patch":
                 pc_hp = min(100, pc_hp + 20)
 
@@ -225,11 +372,9 @@ while running:
     # ウイルス移動
     # ---------------------
     for virus in viruses[:]:
-
         virus["x"] -= virus["speed"]
 
         if virus["x"] < 70:
-
             if virus["type"] == "boss":
                 pc_hp -= 30
             elif virus["type"] == "strong":
@@ -237,71 +382,79 @@ while running:
             else:
                 pc_hp -= 10
 
-            viruses.remove(virus)
-
-    # ---------------------
-    # 攻撃
-    # ---------------------
     if attack:
-
         attack_timer -= 1
 
-        attack_width = 300 if vaccine_mode else 150
+        # スプレー（扇状にばら撒く）
+        # vaccine_mode なら発射数/拡散/弾速を少し強化
+        shots = SPRAY_SHOTS_PER_FRAME + (1 if vaccine_mode else 0)
+        spread_deg = SPRAY_SPREAD_DEG + (6 if vaccine_mode else 0)
+        speed = SPRAY_SPEED + (2 if vaccine_mode else 0)
 
-        attack_rect = pygame.Rect(
-            player_x + 80,
-            player_y,
-            attack_width,
-            80
-        )
+        # プレイヤーの右側中心から発射
+        origin_x = player_x + 80
+        origin_y = player_y + 40
 
-        for virus in viruses[:]:
-
-            virus_rect = pygame.Rect(
-                virus["x"] - 25,
-                virus["y"] - 25,
-                50,
-                50
+        for _ in range(shots):
+            # 「横スプレー」：基本は右方向へ。
+            # 角度のばらつきは小さく、上下の揺れ(vy)で散らす。
+            ang = math.radians(random.uniform(-spread_deg, spread_deg))
+            vx = math.cos(ang) * speed
+            vy = (math.sin(ang) * speed) + random.uniform(-SPRAY_VY_JITTER, SPRAY_VY_JITTER)
+            projectiles.append(
+                {
+                    "x": origin_x,
+                    "y": origin_y,
+                    "vx": vx,
+                    "vy": vy,
+                    "r": SPRAY_RADIUS,
+                }
             )
-
-            if attack_rect.colliderect(virus_rect):
-
-                virus["hp"] -= 1
-
-                if virus["hp"] <= 0:
-
-                    if virus["type"] == "normal":
-                        score += 1
-
-                    elif virus["type"] == "strong":
-                        score += 3
-
-                    elif virus["type"] == "boss":
-                        game_clear = True
-
-                    viruses.remove(virus)
-
-                    special_gauge = min(
-                        MAX_GAUGE,
-                        special_gauge + 1
-                    )
 
         if attack_timer <= 0:
             attack = False
 
+    # ---------------------
+    # 弾の更新＆当たり判定
+    # ---------------------
+    for p in projectiles[:]:
+        p["x"] += p["vx"]
+        p["y"] += p["vy"]
+
+        # 画面外は削除
+        if p["x"] > WIDTH + 50 or p["y"] < -50 or p["y"] > HEIGHT + 50:
+            projectiles.remove(p)
+            continue
+
+        # ウイルスとの当たり判定（簡易：円と四角の当たり）
+        pr = p["r"]
+        bullet_rect = pygame.Rect(int(p["x"] - pr), int(p["y"] - pr), pr * 2, pr * 2)
+        hit = False
+        for virus in viruses[:]:
+            virus_rect = pygame.Rect(virus["x"] - 25, virus["y"] - 25, 50, 50)
+            if bullet_rect.colliderect(virus_rect):
+                virus["hp"] -= 1
+                hit = True
+                if virus["hp"] <= 0:
+                    viruses.remove(virus)
+                    score += 1
+                    speed_bonus = score // 5
+                    special_gauge = min(MAX_GAUGE, special_gauge + 1)
+                break
+        if hit:
+            # 貫通させない（スプレーっぽく命中で消える）
+            projectiles.remove(p)
+
+
     # ワクチン終了
     if vaccine_mode:
-
         vaccine_timer -= 1
-
         if vaccine_timer <= 0:
             vaccine_mode = False
 
     # SSD終了
     if player_speed > base_speed:
-
         ssd_timer -= 1
-
         if ssd_timer <= 0:
             player_speed = base_speed
 
@@ -311,92 +464,45 @@ while running:
     screen.fill((220, 240, 255))
 
     # パソコン
-    pygame.draw.rect(
-        screen,
-        (80, 80, 80),
-        (20, 250, 60, 80)
-    )
+    pygame.draw.rect(screen, (80, 80, 80), (20, 250, 60, 80))
 
     # プレイヤー
-    pygame.draw.rect(
-        screen,
-        (0, 100, 255),
-        (player_x, player_y, 80, 80)
-    )
+    pygame.draw.rect(screen, (0, 100, 255), (player_x, player_y, 80, 80))
 
-    # 攻撃
+    # 攻撃（スプレー中の演出：少し光らせる）
     if attack:
-
         pygame.draw.rect(
             screen,
-            (255, 255, 0),
-            (
-                player_x + 80,
-                player_y,
-                300 if vaccine_mode else 150,
-                80
-            )
+            (255, 255, 160),
+            (player_x + 70, player_y + 20, 30, 40),
+            border_radius=8,
         )
 
-    # ウイルス
+    # 弾
+    for p in projectiles:
+        pygame.draw.circle(screen, (255, 220, 0), (int(p["x"]), int(p["y"])), p["r"])
+
+    # ---------------------
+    # ウイルス（図形の組み合わせで描画）
+    # ---------------------
     for virus in viruses:
+        draw_virus(screen, virus["type"], virus["x"], virus["y"])
 
-        if virus["type"] == "normal":
-            color = (255, 0, 0)
-
-        elif virus["type"] == "strong":
-            color = (180, 0, 255)
-
-        else:
-            color = (0, 0, 0)
-
-        pygame.draw.circle(
-            screen,
-            color,
-            (int(virus["x"]), int(virus["y"])),
-            20
-        )
-
-    # アイテム
+    # ---------------------
+    # アイテム（図形の組み合わせで描画）
+    # ---------------------
     for item in items:
+        draw_item(screen, item["type"], item["x"], item["y"])
 
-        if item["type"] == "patch":
-            color = (0, 255, 0)
-
-        elif item["type"] == "vaccine":
-            color = (255, 255, 0)
-
-        else:
-            color = (0, 255, 255)
-
-        pygame.draw.rect(
-            screen,
-            color,
-            (item["x"], item["y"], 40, 40)
-        )
-
+    screen.blit(font.render(f"HP: {pc_hp}", True, (0, 0, 0)), (20, 20))
+    screen.blit(font.render(f"SCORE: {score}", True, (0, 0, 0)), (20, 60))
     screen.blit(
-        font.render(f"HP: {pc_hp}", True, (0,0,0)),
-        (20,20)
-    )
-
-    screen.blit(
-        font.render(f"SCORE: {score}", True, (0,0,0)),
-        (20,60)
-    )
-
-    screen.blit(
-        font.render(
-            f"GAUGE: {special_gauge}/{MAX_GAUGE}",
-            True,
-            (0,0,0)
-        ),
-        (20,100)
+        font.render(f"GAUGE: {special_gauge}/{MAX_GAUGE}", True, (0, 0, 0)),
+        (20, 100),
     )
 
     # クリア
     if game_clear or score >= 20:
-
         if pc_hp == 100:
             rank = "S"
         elif pc_hp >= 70:
@@ -406,35 +512,54 @@ while running:
         else:
             rank = "C"
 
-        screen.blit(
-            big_font.render(
-                "CLEAR!",
-                True,
-                (0,200,0)
-            ),
-            (300,200)
-        )
+        screen.blit(big_font.render("CLEAR!", True, (0, 200, 0)), (300, 200))
+        screen.blit(font.render(f"RANK : {rank}", True, (0, 0, 0)), (400, 300))
+        screen.blit(font.render("クリック/Enterで終了", True, (0, 0, 0)), (360, 360))
 
-        screen.blit(
-            font.render(
-                f"RANK : {rank}",
-                True,
-                (0,0,0)
-            ),
-            (400,300)
-        )
+        pygame.display.flip()
+
+        # クリアしたら停止して終了
+        waiting = True
+        while waiting:
+            clock.tick(60)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    waiting = False
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    waiting = False
+                if event.type == pygame.KEYDOWN and event.key in (
+                    pygame.K_RETURN,
+                    pygame.K_SPACE,
+                    pygame.K_ESCAPE,
+                ):
+                    waiting = False
+        running = False
+        continue
 
     # ゲームオーバー
     if pc_hp <= 0:
+        screen.blit(big_font.render("GAME OVER", True, (255, 0, 0)), (180, 250))
+        screen.blit(font.render("クリック/Enterで終了", True, (0, 0, 0)), (360, 330))
 
-        screen.blit(
-            big_font.render(
-                "GAME OVER",
-                True,
-                (255,0,0)
-            ),
-            (180,250)
-        )
+        pygame.display.flip()
+
+        # ゲームオーバーで停止して終了
+        waiting = True
+        while waiting:
+            clock.tick(60)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    waiting = False
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    waiting = False
+                if event.type == pygame.KEYDOWN and event.key in (
+                    pygame.K_RETURN,
+                    pygame.K_SPACE,
+                    pygame.K_ESCAPE,
+                ):
+                    waiting = False
+        running = False
+        continue
 
     pygame.display.flip()
 
