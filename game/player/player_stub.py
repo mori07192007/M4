@@ -1,4 +1,5 @@
 import math
+import pygame
 
 
 class PlayerStub:
@@ -54,4 +55,8 @@ class PlayerStub:
         self.x = max(0.0, min(world_w - self.w, self.x))
 
     def draw(self, surf, cam_x):
-        return
+        # 統合テスト用の仮表示（友達のプレイヤー実装が入ったら消してOK）
+        x = int(self.x - cam_x + self.w / 2)
+        y = int(self.y + self.h / 2)
+        pygame.draw.circle(surf, (120, 200, 255), (x, y), 6)
+
