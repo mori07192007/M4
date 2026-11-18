@@ -87,9 +87,14 @@ class VirusEnemy:
         self.eye_style = random.choice(["dot", "oval"])
         self.float_amp = random.uniform(2.0, 5.0) * (0.7 + 0.4 * self.size)
 
-        self.spike_count = random.randint(6, 10)
-        self.spike_len = random.uniform(7.0, 12.0) * (0.8 + 0.4 * self.size)
+        # 画像の雰囲気に寄せる：棒トゲではなく「粒トゲ（ノブ）」
+        self.spike_count = random.randint(6, 9)
+        self.spike_len = random.uniform(10.0, 16.0) * (0.8 + 0.35 * self.size)
         self.spike_phase = random.uniform(0.0, math.tau)
+        self.knob_r = random.uniform(3.0, 4.2) * (0.85 + 0.35 * self.size)
+
+        # 体のハイライト（1体ごとに位置を少し変える）
+        self.hl_phase = random.uniform(0.0, math.tau)
 
         self.shot_cd = random.uniform(0.9, 1.8)
         self.shot_interval = {"S": 1.85, "M": 1.55, "L": 1.25}.get(self.tier, 1.6)
@@ -234,26 +239,52 @@ class VirusEnemy:
         br = int(r * 1.05)
         rr = int(br * sx * pulse)
 
-        # spikes
-        spike_col = (90, 110, 110)
+        # --- bubble shield (画像上部の泡っぽい感じ) ---
+        # 半透明円 + ハイライト
+        shield_r = int(rr * 1.15)
+        shield = pygame.Surface((shield_r * 2 + 6, shield_r * 2 + 6), pygame.SRCALPHA)
+        scx = shield.get_width() // 2
+        scy = shield.get_height() // 2
+        pygame.draw.circle(shield, (210, 230, 255, 45), (scx, scy), shield_r)
+        pygame.draw.circle(shield, (230, 245, 255, 80), (scx - int(shield_r * 0.35), scy - int(shield_r * 0.35)), max(2, int(shield_r * 0.18)))
+        pygame.draw.circle(shield, (230, 245, 255, 55), (scx - int(shield_r * 0.15), scy - int(shield_r * 0.48)), max(2, int(shield_r * 0.10)))
+        surf.blit(shield, (int(px - scx), int(py - scy)))
+
+        # --- knob spikes (粒トゲ) ---
+        spike_col = (85, 95, 100)
+        stem_col = (110, 130, 130)
         for i in range(self.spike_count):
             a = (math.tau * i / self.spike_count) + self.spike_phase + math.sin(global_t * 1.1 + self.anim_phase) * 0.05
-            x1 = px + math.cos(a) * (rr * 0.75)
-            y1 = py + math.sin(a) * (rr * 0.75)
-            x2 = px + math.cos(a) * (rr * 0.75 + self.spike_len)
-            y2 = py + math.sin(a) * (rr * 0.75 + self.spike_len)
-            pygame.draw.line(surf, spike_col, (x1, y1), (x2, y2), 3)
-            pygame.draw.circle(surf, spike_col, (int(x2), int(y2)), 3)
+            # 根本（体側）
+            x1 = px + math.cos(a) * (rr * 0.78)
+            y1 = py + math.sin(a) * (rr * 0.78)
+            # 先端
+            x2 = px + math.cos(a) * (rr * 0.78 + self.spike_len)
+            y2 = py + math.sin(a) * (rr * 0.78 + self.spike_len)
 
-        # body
+            pygame.draw.line(surf, stem_col, (x1, y1), (x2, y2), 4)
+            pygame.draw.circle(surf, spike_col, (int(x2), int(y2)), int(self.knob_r) + 2)
+            pygame.draw.circle(surf, (220, 235, 235), (int(x2 - 1), int(y2 - 1)), max(1, int(self.knob_r // 2)))
+
+        # body (丸)
         pygame.draw.circle(surf, outline, (int(px), int(py)), rr + 5)
         pygame.draw.circle(surf, body, (int(px), int(py)), rr)
 
-        # inner pattern
-        if self.style in ("sleepy", "wink"):
-            pygame.draw.circle(surf, (255, 255, 255), (int(px - rr * 0.25), int(py + rr * 0.15)), max(4, int(rr * 0.18)))
-        elif self.style == "grin":
-            pygame.draw.ellipse(surf, (230, 255, 245), pygame.Rect(int(px - rr * 0.45), int(py - rr * 0.05), int(rr * 0.35), int(rr * 0.22)))
+        # 本体ハイライト（ツヤ）
+        hx = int(px - rr * (0.35 + 0.06 * math.sin(self.hl_phase)))
+        hy = int(py - rr * (0.30 + 0.06 * math.cos(self.hl_phase)))
+        pygame.draw.circle(surf, (255, 255, 255), (hx, hy), max(3, int(rr * 0.18)))
+        pygame.draw.circle(surf, (255, 255, 255), (hx + 2, hy + 2), max(2, int(rr * 0.10)))
+
+        # inner pattern（画像っぽく：小さい粒を数個）
+        pat_col = (245, 255, 250)
+        rng = random.Random(int(self.anim_phase * 10000))
+        for _ in range(3):
+            aa = rng.random() * math.tau
+            rad = rng.uniform(0.10, 0.45) * rr
+            px2 = int(px + math.cos(aa) * rad)
+            py2 = int(py + math.sin(aa) * rad)
+            pygame.draw.circle(surf, pat_col, (px2, py2), max(3, int(rr * 0.08)))
 
         # face
         face_col = (25, 30, 40)
@@ -296,12 +327,13 @@ class VirusEnemy:
         else:
             pygame.draw.arc(surf, face_col, pygame.Rect(mx - 8, my - 2, 16, 10), math.pi * 0.10, math.pi * 0.90, 2)
 
-        # blush
-        t = max(0.0, min(1.0, 1.0 - (getattr(self, "_player_dist", 9999.0) / 520.0))) * 0.85
-        blush = (int(cheek[0]), int(cheek[1] * (1.0 - 0.25 * t)), int(cheek[2] * (1.0 - 0.30 * t)))
-        b_r = max(2, int(2 * self.size))
-        pygame.draw.circle(surf, blush, (int(px - rr * 0.58), int(py + rr * 0.05)), b_r)
-        pygame.draw.circle(surf, blush, (int(px + rr * 0.58), int(py + rr * 0.05)), b_r)
+        # blush（薄めで固定寄り：キモさ回避）
+        t = max(0.0, min(1.0, 1.0 - (getattr(self, "_player_dist", 9999.0) / 520.0)))
+        t = t * 0.45
+        blush = (int(cheek[0]), int(cheek[1] * (1.0 - 0.20 * t)), int(cheek[2] * (1.0 - 0.25 * t)))
+        b_r = max(2, int(1.6 * self.size))
+        pygame.draw.circle(surf, blush, (int(px - rr * 0.55), int(py + rr * 0.08)), b_r)
+        pygame.draw.circle(surf, blush, (int(px + rr * 0.55), int(py + rr * 0.08)), b_r)
 
 
 def spawn_for_segment(seg, *, ground_y):

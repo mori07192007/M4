@@ -155,7 +155,7 @@ def main():
         player.draw(screen, cam_x)
 
         txt = font.render(
-            f"Segment={seg} Theme={theme['name']} (player is hidden stub)",
+            f"Segment={seg} Theme={theme['name']} (integrated)",
             True,
             (203, 213, 225),
         )
