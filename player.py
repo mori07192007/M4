@@ -163,6 +163,9 @@ pc_hit_timer = 0
 # PCに当たった時に表示するダメージ数字（フローティングテキスト）
 damage_texts = []  # {"text": str, "x": float, "y": float, "vy": float, "timer": int}
 
+# アイテム取得表示（プレイヤーの上に出す）
+pickup_texts = []  # {"text": str, "x": float, "y": float, "vy": float, "timer": int, "color": (r,g,b)}
+
 # =========================
 # スコア（表示しないが、内部の進行条件には使う）
 # =========================
@@ -432,14 +435,32 @@ while running:
         if player_rect.colliderect(item_rect):
             if item["type"] == "patch":
                 pc_hp = min(MAX_HP, pc_hp + 20)
+                got_text = "HEAL +20"
+                got_color = (0, 160, 60)
 
             elif item["type"] == "vaccine":
                 vaccine_mode = True
                 vaccine_timer = 600
+                got_text = "POWER UP!"
+                got_color = (200, 120, 0)
 
             elif item["type"] == "ssd":
                 player_speed = 10
                 ssd_timer = 600
+                got_text = "SPEED UP!"
+                got_color = (0, 120, 220)
+
+            # 取得内容をプレイヤーの上に大きく表示
+            pickup_texts.append(
+                {
+                    "text": got_text,
+                    "x": player_x,
+                    "y": player_y - 30,
+                    "vy": -0.9,
+                    "timer": 55,
+                    "color": got_color,
+                }
+            )
 
             items.remove(item)
 
@@ -679,6 +700,34 @@ while running:
         screen.blit(surf, (int(dt["x"]), int(dt["y"])))
         if dt["timer"] <= 0:
             damage_texts.remove(dt)
+
+    # アイテム取得表示（プレイヤーの上に浮かぶ・大きめ）
+    for pt in pickup_texts[:]:
+        pt["y"] += pt["vy"]
+        pt["timer"] -= 1
+        alpha = max(0, min(255, int(255 * (pt["timer"] / 55))))
+
+        surf = big_font.render(pt["text"], True, pt["color"])
+        # さらに強調
+        surf = pygame.transform.smoothscale(
+            surf,
+            (int(surf.get_width() * 1.15), int(surf.get_height() * 1.15)),
+        )
+        surf.set_alpha(alpha)
+
+        # プレイヤーの中心あたりに来るようにXを調整
+        x = int(pt["x"] + 40 - surf.get_width() // 2)
+        y = int(pt["y"])
+
+        # 縁取り（黒）
+        for ox, oy in [(-2, 0), (2, 0), (0, -2), (0, 2)]:
+            outline = surf.copy()
+            outline.fill((0, 0, 0, alpha), special_flags=pygame.BLEND_RGBA_MULT)
+            screen.blit(outline, (x + ox, y + oy))
+        screen.blit(surf, (x, y))
+
+        if pt["timer"] <= 0:
+            pickup_texts.remove(pt)
 
     # クリア
     if game_clear or score >= 20:
