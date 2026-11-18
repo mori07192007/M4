@@ -498,7 +498,8 @@ class Player:
         self.x = clamp(self.x, 0, WORLD_W - self.w)
 
     def draw(self, surf, cam_x):
-        pygame.draw.rect(surf, (127, 178, 255), pygame.Rect(int(self.x - cam_x), int(self.y), self.w, self.h))
+        # プレイヤーの見た目は別担当が作る想定なので、ここでは描かない
+        return
 
 # =========================================================
 # Spawning by segment (画面が変わる=区画が変わる)
