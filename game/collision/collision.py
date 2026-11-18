@@ -785,7 +785,7 @@ def run_standalone():
     _reset_game_state()
     show_title_screen()
 
-    player_img = pygame.image.load("player_idle.png")
+    player_img = pygame.image.load("player_attack.png")
     player_img = pygame.transform.scale(player_img, (80, 80))
 
     running = True
@@ -807,7 +807,7 @@ if __name__ == "__main__":
 
 show_title_screen()
 
-player_img = pygame.image.load("player_idle.png")
+player_img = pygame.image.load("player_attack.png")
 player_img = pygame.transform.scale(player_img, (80, 80))
 
 while running:

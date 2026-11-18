@@ -158,11 +158,12 @@ def main():
     # We initialize it for our window size and call step_collision() per-frame.
     collision_game.init_collision(W, H)
     # collision uses an image file for the player sprite.
-    # Load it once here (path relative to this file).
+    # Load it once here.
     try:
-        # Asset is stored at the M4 project root (confirmed: /home/moe7514/M4/player_idle.png)
-        player_img_path = Path(__file__).resolve().parents[1] / "player_idle.png"
-        collision_game.player_img = pygame.image.load(str(player_img_path))
+        # Load from the M4 project root (current repo layout)
+        # Expected path: /home/moe7514/M4/player_attack.png
+        player_img_path = Path(__file__).resolve().parents[1] / "player_attack.png"
+        collision_game.player_img = pygame.image.load(str(player_img_path)).convert_alpha()
         collision_game.player_img = pygame.transform.scale(collision_game.player_img, (80, 80))
     except FileNotFoundError:
         # Fallback: simple rect surface if asset is missing.
