@@ -95,7 +95,37 @@ def draw_item(surface, itype, x, y):
         pygame.draw.rect(surface, (200, 255, 255), (x + 10, y + 10, 20, 20), border_radius=4)
         for i in range(5):
             pygame.draw.line(surface, (0, 120, 140), (x + 6 + i * 7, y), (x + 6 + i * 7, y + 6), 2)
+
             pygame.draw.line(surface, (0, 120, 140), (x + 6 + i * 7, y + 34), (x + 6 + i * 7, y + 40), 2)
+def draw_pc(surface, x, y):
+    """左端のPC（パソコン）をそれっぽく描く（左上座標 x,y）"""
+    x = int(x)
+    y = int(y)
+
+    # モニター
+    pygame.draw.rect(surface, (30, 30, 30), (x + 10, y, 120, 80), border_radius=6)
+    pygame.draw.rect(surface, (200, 240, 255), (x + 18, y + 8, 104, 60), border_radius=4)
+    # 画面のキラッと感
+    pygame.draw.line(surface, (255, 255, 255), (x + 26, y + 14), (x + 70, y + 14), 2)
+    pygame.draw.line(surface, (255, 255, 255), (x + 26, y + 20), (x + 55, y + 20), 2)
+
+    # モニタースタンド
+    pygame.draw.rect(surface, (60, 60, 60), (x + 62, y + 78, 16, 18), border_radius=3)
+    pygame.draw.rect(surface, (70, 70, 70), (x + 40, y + 94, 60, 10), border_radius=5)
+
+    # 本体（タワー）
+    pygame.draw.rect(surface, (80, 80, 80), (x, y + 40, 46, 92), border_radius=6)
+    pygame.draw.rect(surface, (40, 40, 40), (x + 6, y + 50, 34, 70), 2, border_radius=4)
+    # 電源ボタン
+    pygame.draw.circle(surface, (0, 220, 120), (x + 23, y + 60), 5)
+    pygame.draw.circle(surface, (20, 60, 40), (x + 23, y + 60), 5, 2)
+
+    # キーボード
+    pygame.draw.rect(surface, (160, 160, 160), (x + 54, y + 110, 92, 18), border_radius=6)
+    pygame.draw.rect(surface, (110, 110, 110), (x + 58, y + 114, 84, 10), border_radius=4)
+    # 簡易キー表現
+    for i in range(6):
+        pygame.draw.line(surface, (140, 140, 140), (x + 62 + i * 13, y + 114), (x + 62 + i * 13, y + 124), 1)
 
 # =========================
 # プレイヤー
@@ -463,8 +493,8 @@ while running:
     # ---------------------
     screen.fill((220, 240, 255))
 
-    # パソコン
-    pygame.draw.rect(screen, (80, 80, 80), (20, 250, 60, 80))
+    # パソコン（それっぽく）
+    draw_pc(screen, 20, 230)
 
     # プレイヤー
     pygame.draw.rect(screen, (0, 100, 255), (player_x, player_y, 80, 80))
