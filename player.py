@@ -271,7 +271,7 @@ def show_title_screen():
             "【敵とポイント】\n"
             "・赤ウイルス：HP1 / +1点\n"
             "・紫ウイルス：HP2 / +3点（速い）\n"
-            "・BOSS：HP10 / 倒すとCLEAR（出現：スコア15）\n"
+            "・BOSS：HP3 / 倒すとCLEAR（出現：スコア15）\n"
             "※ウイルスが左端（PC）に到達するとHP減少\n"
             "\n"
             "【アイテム効果】\n"
@@ -355,7 +355,8 @@ while running:
                     "x": WIDTH,
                     "y": HEIGHT // 2,
                     "speed": 3,
-                    "hp": 10,
+                    # ボス：スプレー3回以上必要になるくらい硬め
+                    "hp": 3,
                     "type": "boss",
                 }
             )
@@ -367,6 +368,7 @@ while running:
                     "x": WIDTH,
                     "y": random.randint(50, 550),
                     "speed": 4 + speed_bonus,
+                    # 弱：スプレー1回分くらいで倒せる
                     "hp": 1,
                     "type": "normal",
                 }
@@ -378,6 +380,7 @@ while running:
                     "x": WIDTH,
                     "y": random.randint(50, 550),
                     "speed": 6 + speed_bonus,
+                    # 強：スプレー2回分くらいで倒せる
                     "hp": 2,
                     "type": "strong",
                 }
