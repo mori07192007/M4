@@ -68,35 +68,50 @@ def draw_virus(surface, vtype, x, y):
 
 
 def draw_item(surface, itype, x, y):
-    """アイテムを図形の組み合わせで描く（左上座標 x,y / 40x40想定）"""
+    """アイテムを図形の組み合わせで描く（左上座標 x,y）"""
     x = int(x)
     y = int(y)
 
+    # アイテムサイズ（大きめに調整）
+    size = 56
+
     if itype == "patch":
         # 回復：緑のメディカルキット＋白い十字
-        pygame.draw.rect(surface, (20, 160, 60), (x, y, 40, 40), border_radius=8)
-        pygame.draw.rect(surface, (10, 120, 45), (x, y, 40, 40), 3, border_radius=8)
+        pygame.draw.rect(surface, (20, 160, 60), (x, y, size, size), border_radius=10)
+        pygame.draw.rect(surface, (10, 120, 45), (x, y, size, size), 3, border_radius=10)
         # 十字
-        pygame.draw.rect(surface, (245, 245, 245), (x + 16, y + 8, 8, 24))
-        pygame.draw.rect(surface, (245, 245, 245), (x + 8, y + 16, 24, 8))
+        pygame.draw.rect(surface, (245, 245, 245), (x + size * 0.40, y + size * 0.18, size * 0.20, size * 0.64))
+        pygame.draw.rect(surface, (245, 245, 245), (x + size * 0.18, y + size * 0.40, size * 0.64, size * 0.20))
 
     elif itype == "vaccine":
         # ワクチン：注射器っぽい
-        pygame.draw.rect(surface, (250, 250, 250), (x + 8, y + 18, 24, 12), border_radius=4)
-        pygame.draw.rect(surface, (180, 180, 180), (x + 6, y + 20, 4, 8))
-        pygame.draw.rect(surface, (200, 200, 200), (x + 32, y + 20, 4, 8))
-        pygame.draw.line(surface, (120, 120, 120), (x + 36, y + 24), (x + 40, y + 24), 2)
-        pygame.draw.circle(surface, (255, 220, 0), (x + 16, y + 24), 3)
+        pygame.draw.rect(surface, (250, 250, 250), (x + size * 0.20, y + size * 0.40, size * 0.60, size * 0.22), border_radius=6)
+        pygame.draw.rect(surface, (180, 180, 180), (x + size * 0.15, y + size * 0.44, size * 0.08, size * 0.14))
+        pygame.draw.rect(surface, (200, 200, 200), (x + size * 0.80, y + size * 0.44, size * 0.08, size * 0.14))
+        pygame.draw.line(surface, (120, 120, 120), (x + size * 0.90, y + size * 0.51), (x + size * 1.00, y + size * 0.51), 2)
+        pygame.draw.circle(surface, (255, 220, 0), (int(x + size * 0.40), int(y + size * 0.51)), 4)
 
     else:
         # SSD：水色チップ
-        pygame.draw.rect(surface, (0, 200, 220), (x, y, 40, 40), border_radius=6)
-        pygame.draw.rect(surface, (0, 120, 140), (x, y, 40, 40), 3, border_radius=6)
-        pygame.draw.rect(surface, (200, 255, 255), (x + 10, y + 10, 20, 20), border_radius=4)
+        pygame.draw.rect(surface, (0, 200, 220), (x, y, size, size), border_radius=8)
+        pygame.draw.rect(surface, (0, 120, 140), (x, y, size, size), 3, border_radius=8)
+        pygame.draw.rect(surface, (200, 255, 255), (x + size * 0.25, y + size * 0.25, size * 0.50, size * 0.50), border_radius=6)
         for i in range(5):
-            pygame.draw.line(surface, (0, 120, 140), (x + 6 + i * 7, y), (x + 6 + i * 7, y + 6), 2)
+            pygame.draw.line(
+                surface,
+                (0, 120, 140),
+                (x + size * (0.12 + i * 0.15), y),
+                (x + size * (0.12 + i * 0.15), y + size * 0.15),
+                2,
+            )
 
-            pygame.draw.line(surface, (0, 120, 140), (x + 6 + i * 7, y + 34), (x + 6 + i * 7, y + 40), 2)
+            pygame.draw.line(
+                surface,
+                (0, 120, 140),
+                (x + size * (0.12 + i * 0.15), y + size * 0.85),
+                (x + size * (0.12 + i * 0.15), y + size),
+                2,
+            )
 def draw_pc(surface, x, y):
     """左端のPC（パソコン）をそれっぽく描く（左上座標 x,y）"""
     x = int(x)
@@ -382,7 +397,8 @@ while running:
     for item in items[:]:
         item["x"] -= 4
 
-        item_rect = pygame.Rect(item["x"], item["y"], 40, 40)
+        # アイテムサイズを大きめにしたので当たり判定も合わせる
+        item_rect = pygame.Rect(item["x"], item["y"], 56, 56)
 
         if player_rect.colliderect(item_rect):
             if item["type"] == "patch":
