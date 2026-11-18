@@ -1,0 +1,311 @@
+import pygame
+from pygame import Rect
+
+pygame.init()
+
+W, H = 960, 540
+screen = pygame.display.set_mode((W, H))
+pygame.display.set_caption("Platformer (LEFT/RIGHT move, UP jump) - enemies & goal")
+clock = pygame.time.Clock()
+
+# --- 定数（調整しやすい） ---
+G = 2400.0
+MOVE_ACC = 6200.0
+AIR_ACC = 4200.0
+MAX_SPEED = 420.0
+FRICTION = 7200.0
+JUMP_V = 860.0
+
+COYOTE = 0.08
+JUMP_BUFFER = 0.10
+
+# 敵
+ENEMY_SPEED = 110.0          # 左右移動速度
+STOMP_BOUNCE_V = 520.0       # 踏んだ時に少し跳ね返る
+
+# --- レベル（床/足場） ---
+solids = [
+    Rect(-2000, 460, 900, 200),
+    Rect(-900,  460, 700, 200),
+    Rect(50,    460, 800, 200),
+    Rect(950,   460, 900, 200),
+
+    Rect(-650, 360, 180, 24),
+    Rect(-350, 300, 180, 24),
+    Rect(-50,  340, 180, 24),
+    Rect(260,  280, 240, 24),
+    Rect(620,  340, 180, 24),
+    Rect(1120, 320, 240, 24),
+
+    Rect(1500, 390, 220, 70),
+]
+
+spikes = [
+    Rect(780, 440, 120, 20),
+]
+
+# ゴール（旗っぽいもの）
+goal = Rect(1700, 250, 26, 210)
+
+# --- プレイヤ ---
+player = Rect(-750, 200, 32, 42)
+vx, vy = 0.0, 0.0
+on_ground = False
+coyote_timer = 0.0
+jumpbuf_timer = 0.0
+
+camera_x = 0.0
+
+# クリア状態
+cleared = False
+
+# --- 敵（踏める） ---
+# rect: 当たり判定、dir: -1 or +1、alive: 生存
+enemies = []
+
+def spawn_enemies():
+    global enemies
+    enemies = [
+        {"rect": Rect(-520, 330, 34, 30), "dir":  1, "alive": True},
+        {"rect": Rect( 350, 250, 34, 30), "dir": -1, "alive": True},
+        {"rect": Rect(1250, 290, 34, 30), "dir":  1, "alive": True},
+    ]
+
+def reset():
+    global vx, vy, on_ground, coyote_timer, jumpbuf_timer, camera_x, cleared
+    player.x, player.y = -750, 200
+    vx, vy = 0.0, 0.0
+    on_ground = False
+    coyote_timer = 0.0
+    jumpbuf_timer = 0.0
+    camera_x = player.x - W * 0.35
+    cleared = False
+    spawn_enemies()
+
+def clamp(x, a, b):
+    return a if x < a else b if x > b else x
+
+def move_and_collide_player(dt):
+    """プレイヤの軸分離衝突解決"""
+    global vx, vy, on_ground
+    on_ground = False
+
+    # X
+    player.x += int(vx * dt)
+    for s in solids:
+        if player.colliderect(s):
+            if vx > 0:
+                player.right = s.left
+            elif vx < 0:
+                player.left = s.right
+            vx = 0.0
+
+    # Y
+    player.y += int(vy * dt)
+    for s in solids:
+        if player.colliderect(s):
+            if vy > 0:
+                player.bottom = s.top
+                vy = 0.0
+                on_ground = True
+            elif vy < 0:
+                player.top = s.bottom
+                vy = 0.0
+
+def move_enemy_and_collide(e, dt):
+    """敵は重力なし・床上を左右移動。壁や端で反転。"""
+    r: Rect = e["rect"]
+    dx = e["dir"] * ENEMY_SPEED * dt
+
+    # X移動
+    r.x += int(dx)
+
+    hit_wall = False
+    for s in solids:
+        if r.colliderect(s):
+            hit_wall = True
+            if dx > 0:
+                r.right = s.left
+            else:
+                r.left = s.right
+            break
+
+    # 足元チェック：次の一歩先に床があるか（なければ反転）
+    # ちょっと前方の下に点検用Rectを置く
+    front_x = r.right + 2 if e["dir"] > 0 else r.left - 2
+    foot_probe = Rect(front_x, r.bottom + 1, 2, 4)
+
+    has_floor_ahead = False
+    for s in solids:
+        if foot_probe.colliderect(s):
+            has_floor_ahead = True
+            break
+
+    if hit_wall or (not has_floor_ahead):
+        e["dir"] *= -1
+
+def is_stomp(player_rect: Rect, enemy_rect: Rect, vy_value: float):
+    """
+    踏み判定:
+      - プレイヤが下方向に落下中 (vy>0)
+      - プレイヤの足元が敵の上面付近に当たる
+    """
+    if vy_value <= 0:
+        return False
+    # 直前位置が無いので「足元が敵上面に近い」条件で簡易判定
+    # プレイヤ底辺が敵上面より少し上〜少し下に入ったら踏み
+    return (player_rect.bottom - enemy_rect.top) <= 14
+
+reset()
+
+running = True
+font = pygame.font.SysFont(None, 26)
+
+while running:
+    dt = min(0.02, clock.tick(60) / 1000.0)
+
+    for e in pygame.event.get():
+        if e.type == pygame.QUIT:
+            running = False
+
+    keys = pygame.key.get_pressed()
+
+    if keys[pygame.K_r]:
+        reset()
+
+    if not cleared:
+        left  = keys[pygame.K_LEFT]
+        right = keys[pygame.K_RIGHT]
+        jump  = keys[pygame.K_UP]   # ジャンプは上矢印
+
+        # ジャンプバッファ
+        if jump:
+            jumpbuf_timer = JUMP_BUFFER
+        else:
+            jumpbuf_timer = max(0.0, jumpbuf_timer - dt)
+
+        # コヨーテ
+        if on_ground:
+            coyote_timer = COYOTE
+        else:
+            coyote_timer = max(0.0, coyote_timer - dt)
+
+        # 左右加速
+        ax = MOVE_ACC if on_ground else AIR_ACC
+        if left and not right:
+            vx -= ax * dt
+        if right and not left:
+            vx += ax * dt
+
+        # 摩擦（地上＆入力なし）
+        if on_ground and not left and not right:
+            if abs(vx) <= FRICTION * dt:
+                vx = 0.0
+            else:
+                vx -= (FRICTION * dt) * (1 if vx > 0 else -1)
+
+        vx = clamp(vx, -MAX_SPEED, MAX_SPEED)
+
+        # 重力
+        vy += G * dt
+
+        # ジャンプ成立
+        if jumpbuf_timer > 0.0 and coyote_timer > 0.0:
+            vy = -JUMP_V
+            jumpbuf_timer = 0.0
+            coyote_timer = 0.0
+            on_ground = False
+
+        # 敵更新
+        for en in enemies:
+            if en["alive"]:
+                move_enemy_and_collide(en, dt)
+
+        # プレイヤ移動
+        move_and_collide_player(dt)
+
+        # 落下死
+        if player.y > 1200:
+            reset()
+
+        # トゲ
+        for sp in spikes:
+            if player.colliderect(sp):
+                reset()
+
+        # 敵当たり判定（踏み / 接触死）
+        for en in enemies:
+            if not en["alive"]:
+                continue
+            er = en["rect"]
+            if player.colliderect(er):
+                if is_stomp(player, er, vy):
+                    # 踏んだ：敵を倒す
+                    en["alive"] = False
+                    # 敵の上にプレイヤを置き直し & バウンド
+                    player.bottom = er.top
+                    vy = -STOMP_BOUNCE_V
+                else:
+                    # 横当たり等：やられ（リセット）
+                    reset()
+                    break
+
+        # ゴール
+        if player.colliderect(goal):
+            cleared = True
+            vx = 0.0
+            vy = 0.0
+
+        # カメラ
+        target = player.x - W * 0.35
+        camera_x += (target - camera_x) * min(1.0, 8.0 * dt)
+
+    # --- 描画 ---
+    screen.fill((27, 59, 122))
+    pygame.draw.rect(screen, (30, 140, 200), Rect(0, 0, W, H))
+
+    # 足場
+    for s in solids:
+        sx = s.x - int(camera_x)
+        pygame.draw.rect(screen, (91, 58, 29), Rect(sx, s.y, s.w, s.h))
+        pygame.draw.rect(screen, (122, 75, 34), Rect(sx, s.y, s.w, 6))
+
+    # トゲ
+    for sp in spikes:
+        sx = sp.x - int(camera_x)
+        pygame.draw.rect(screen, (196, 59, 59), Rect(sx, sp.y, sp.w, sp.h))
+
+    # ゴール旗（棒 + 旗）
+    gx = goal.x - int(camera_x)
+    pygame.draw.rect(screen, (230, 230, 230), Rect(gx, goal.y, 6, goal.h))         # pole
+    pygame.draw.rect(screen, (60, 240, 120), Rect(gx + 6, goal.y + 20, 40, 24))    # flag
+
+    # 敵
+    for en in enemies:
+        if not en["alive"]:
+            continue
+        r = en["rect"]
+        ex = r.x - int(camera_x)
+        pygame.draw.rect(screen, (210, 120, 50), Rect(ex, r.y, r.w, r.h))
+        # 目っぽいもの
+        pygame.draw.rect(screen, (15, 15, 15), Rect(ex + 8, r.y + 10, 4, 4))
+        pygame.draw.rect(screen, (15, 15, 15), Rect(ex + 20, r.y + 10, 4, 4))
+
+    # プレイヤ
+    px = player.x - int(camera_x)
+    pygame.draw.rect(screen, (255, 211, 77), Rect(px, player.y, player.w, player.h))
+    pygame.draw.rect(screen, (17, 17, 17), Rect(px + 8,  player.y + 14, 4, 4))
+    pygame.draw.rect(screen, (17, 17, 17), Rect(px + 20, player.y + 14, 4, 4))
+
+    # HUD
+    hud = "Move: LEFT/RIGHT   Jump: UP   R: reset"
+    if cleared:
+        msg = font.render("CLEAR! (press R to restart)", True, (255, 255, 255))
+        screen.blit(msg, (W // 2 - msg.get_width() // 2, 20))
+    else:
+        msg = font.render(hud, True, (255, 255, 255))
+        screen.blit(msg, (12, 12))
+
+    pygame.display.flip()
+
+pygame.quit()
