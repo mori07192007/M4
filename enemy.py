@@ -108,19 +108,10 @@ class Projectile:
             self.life = 1.1
             self.gravity = 900.0
         else:
-            # 菌の種類で見た目と性能を変える
-            if self.germ_kind == "cute":
-                self.r = 7
-                self.life = 2.0
-                self.gravity = 120.0   # ふわっと落ちる
-            elif self.germ_kind == "evil":
-                self.r = 6
-                self.life = 1.8
-                self.gravity = 0.0     # 直線気味
-            else:  # "spore"
-                self.r = 6
-                self.life = 2.2
-                self.gravity = 200.0
+            # 菌はシンプルに（凝りすぎない）
+            self.r = 6
+            self.life = 1.7
+            self.gravity = 120.0
 
     def update(self, dt):
         self.vy += self.gravity * dt
@@ -128,21 +119,11 @@ class Projectile:
         self.y += self.vy * dt
         self.life -= dt
 
-        # 菌ごとの床反応
+        # 菌は床で少しだけ跳ねる
         if self.typ == "germ" and self.y + self.r > GROUND_Y:
             self.y = GROUND_Y - self.r
-            if self.germ_kind == "spore":
-                # sporeは跳ねる
-                self.vx *= 0.55
-                self.vy *= -0.55
-            elif self.germ_kind == "cute":
-                # cuteはコロコロ転がって弱く跳ねる
-                self.vx *= 0.70
-                self.vy *= -0.18
-            else:
-                # evilは床で減速して消えやすい感じ
-                self.vx *= 0.25
-                self.vy *= -0.10
+            self.vx *= 0.45
+            self.vy *= -0.20
 
     def draw(self, surf, cam_x):
         if self.typ == "flame":
@@ -150,90 +131,18 @@ class Projectile:
             pygame.draw.circle(surf, col, (int(self.x - cam_x), int(self.y)), self.r)
             return
 
-        # 菌の色（区画テーマのパレットがあれば優先）
-        if self.germ_kind in self.palette:
-            col = self.palette[self.germ_kind]
-        else:
-            if self.germ_kind == "cute":
-                col = (255, 170, 220)  # ピンク
-            elif self.germ_kind == "evil":
-                col = (160, 90, 255)   # 紫
-            else:
-                col = (182, 255, 234)  # ミント
+        # 菌は単色でOK（テーマがあればそれを使う）
+        col = (190, 255, 235)
+        if self.palette:
+            # どれか1色を使う（種類は持たない）
+            col = next(iter(self.palette.values()))
 
         cx = int(self.x - cam_x)
         cy = int(self.y)
 
-        # 見た目：もっと「かわいい」に寄せる
-        # - 外側リング
-        # - つや（ハイライト）
-        # - 大きめの目（キラ目）
-        # - ほっぺ
-        # - 表情（happy/sleepy/uwu）
-        # - 小さいアクセ（星）
-
-        # 外側リング（ぷに感）
-        ring = (255, 255, 255)
-        pygame.draw.circle(surf, ring, (cx, cy), self.r)
-        pygame.draw.circle(surf, col, (cx, cy), max(1, self.r - 2))
-
-        # ハイライト（ツヤ）
-        hi = (255, 255, 255)
-        pygame.draw.circle(surf, hi, (cx - max(2, self.r // 3), cy - max(2, self.r // 3)), max(2, self.r // 3))
-        pygame.draw.circle(surf, (255, 255, 255), (cx - 1, cy - 1), 1)
-
-        if self.germ_kind == "cute":
-            eye = (40, 40, 55)
-            white = (255, 255, 255)
-
-            # 目（キラ目）
-            ex1, ex2 = cx - 4, cx + 4
-            ey = cy - 1
-            pygame.draw.circle(surf, eye, (ex1, ey), 2)
-            pygame.draw.circle(surf, eye, (ex2, ey), 2)
-            pygame.draw.circle(surf, white, (ex1 - 1, ey - 1), 1)
-            pygame.draw.circle(surf, white, (ex2 - 1, ey - 1), 1)
-
-            # ほっぺ
-            blush = (255, 120, 170)
-            pygame.draw.circle(surf, blush, (cx - 7, cy + 3), 2)
-            pygame.draw.circle(surf, blush, (cx + 7, cy + 3), 2)
-
-            # 口（表情）
-            if self.face == "sleepy":
-                pygame.draw.line(surf, eye, (cx - 6, cy - 2), (cx - 2, cy - 2), 2)
-                pygame.draw.line(surf, eye, (cx + 2, cy - 2), (cx + 6, cy - 2), 2)
-                pygame.draw.arc(surf, eye, (cx - 4, cy + 3, 8, 5), math.pi * 0.10, math.pi * 0.90, 2)
-            elif self.face == "uwu":
-                pygame.draw.arc(surf, eye, (cx - 6, cy + 2, 6, 4), math.pi * 0.10, math.pi * 0.90, 2)
-                pygame.draw.arc(surf, eye, (cx, cy + 2, 6, 4), math.pi * 0.10, math.pi * 0.90, 2)
-            else:
-                pygame.draw.arc(surf, eye, (cx - 4, cy + 2, 8, 5), math.pi * 0.10, math.pi * 0.90, 2)
-
-            # 小アクセ（星）
-            star = (255, 245, 150)
-            pygame.draw.circle(surf, star, (cx + self.r - 2, cy - self.r + 2), 1)
-
-        elif self.germ_kind == "evil":
-            # 悪い菌：かわいいを保ちつつ、色で“悪い”感（顔は怒り/ニヤ）
-            outline = (25, 10, 45)
-            pygame.draw.circle(surf, outline, (cx, cy), self.r, 2)
-
-            eye = (25, 10, 45)
-            pygame.draw.line(surf, eye, (cx - 7, cy - 4), (cx - 2, cy - 2), 2)
-            pygame.draw.line(surf, eye, (cx + 2, cy - 2), (cx + 7, cy - 4), 2)
-            pygame.draw.circle(surf, eye, (cx - 4, cy), 2)
-            pygame.draw.circle(surf, eye, (cx + 4, cy), 2)
-
-            # ニヤ口
-            pygame.draw.arc(surf, eye, (cx - 5, cy + 2, 10, 6), math.pi * 0.05, math.pi * 0.95, 2)
-
-        else:
-            # spore：ふわふわ＋粒々多め
-            dot = (245, 250, 255)
-            pygame.draw.circle(surf, dot, (cx + 2, cy - 2), 1)
-            pygame.draw.circle(surf, dot, (cx - 2, cy + 2), 1)
-            pygame.draw.circle(surf, dot, (cx + 5, cy + 1), 1)
+        # 菌：丸＋ハイライトだけ（シンプル）
+        pygame.draw.circle(surf, col, (cx, cy), self.r)
+        pygame.draw.circle(surf, (255, 255, 255), (cx - 2, cy - 2), max(1, self.r // 3))
 
 # =========================================================
 # Virus enemy
@@ -269,6 +178,11 @@ class Virus:
         self.blink_t = random.uniform(0.4, 2.0)  # 次の瞬きまで
         self.blink_len = 0.10  # 瞬き時間
         self.blink_progress = 0.0
+
+        # 見た目バリエーション（同じ見た目にならない）
+        self.style = random.choice(["sheet", "smile", "shy", "fang"])
+        self.eye_style = random.choice(["dot", "oval", "star"])
+        self.float_amp = random.uniform(2.0, 5.0) * (0.7 + 0.4 * self.size)
 
         # プレイヤーに向けて菌/炎を撃つ（一定間隔）
         self.shot_cd = random.uniform(0.9, 1.8)  # 初回は少しバラす
@@ -308,36 +222,11 @@ class Virus:
             t = 0.5 if count == 1 else i / (count - 1)
             a = center - spread / 2 + spread * t + (random.random() - 0.5) * 0.22
 
-            if theme is None:
-                kind = random.choice(["cute", "evil", "spore"])
-                palette = None
-                face = None
-            else:
-                kind = weighted_choice(theme["weights"])
-                palette = theme.get("palette")
-                face_list = theme.get("faces", {}).get(kind, [None])
-                face = random.choice(face_list) if face_list else None
+            # 菌はシンプルでOK（速度も固定寄り）
+            palette = theme.get("palette") if theme else None
+            sp = 235 * (0.85 + 0.08 * self.size)
 
-            # 菌の種類で速度を変える（かわいい=少し遅い、悪い=速い）
-            if kind == "cute":
-                sp = 200 * (0.85 + 0.08 * self.size)
-            elif kind == "evil":
-                sp = 310 * (0.85 + 0.08 * self.size)
-            else:
-                sp = 235 * (0.85 + 0.08 * self.size)
-
-            projectiles.append(
-                Projectile(
-                    "germ",
-                    cx,
-                    cy,
-                    math.cos(a) * sp,
-                    math.sin(a) * sp,
-                    germ_kind=kind,
-                    palette=palette,
-                    face=face,
-                )
-            )
+            projectiles.append(Projectile("germ", cx, cy, math.cos(a) * sp, math.sin(a) * sp, palette=palette))
 
         # 炎（重力あり、数少なめ）
         flames = max(1, round(1.2 * self.size))
@@ -427,35 +316,15 @@ class Virus:
             projectiles.append(Projectile("flame", cx, cy, nx * sp, ny * sp - 120.0))
             return
 
-        # 菌：テーマに合わせて色/顔を付与
-        if theme is None:
-            kind = random.choice(["cute", "evil", "spore"])
-            palette = None
-            face = None
-        else:
-            kind = weighted_choice(theme["weights"])
-            palette = theme.get("palette")
-            face_list = theme.get("faces", {}).get(kind, [None])
-            face = random.choice(face_list) if face_list else None
-
         sp = {"S": 255.0, "M": 275.0, "L": 300.0}.get(self.tier, 270.0)
         # 少しばらけさせる
         jitter = 0.10
         ang = math.atan2(ny, nx) + random.uniform(-jitter, jitter)
         vx = math.cos(ang) * sp
         vy = math.sin(ang) * sp
-        projectiles.append(
-            Projectile(
-                "germ",
-                cx,
-                cy,
-                vx,
-                vy,
-                germ_kind=kind,
-                palette=palette,
-                face=face,
-            )
-        )
+        # 菌はシンプルでOK（テーマ色があればそれを使う）
+        palette = theme.get("palette") if theme else None
+        projectiles.append(Projectile("germ", cx, cy, vx, vy, palette=palette))
 
     def draw(self, surf, cam_x):
         cx = self.x + self.w / 2
@@ -472,104 +341,101 @@ class Virus:
         # 丸い“ウイルス”感は減らして、かわいい敵キャラっぽいシルエットにする
         r = min(self.w, self.h) * 0.45
 
-        # --- ゆるキャラ風（クマっぽい・オリジナル） ---
-        # 3) ピンクベージュ系
-        # tierは“強さ”なので、色の差は控えめにして少しだけ濃淡で表現
+        # --- おばけ系（かわいめ・オリジナル） ---
+        # tierは色の濃淡に使う（強さはHP/弾数/発射頻度）
         body = {
-            "S": (248, 200, 210),
-            "M": (242, 178, 196),
-            "L": (236, 150, 176),
-        }.get(self.tier, (242, 178, 196))
-        outline = (55, 45, 55)
-        belly = (255, 245, 248)
+            "S": (235, 245, 255),
+            "M": (210, 235, 255),
+            "L": (190, 225, 255),
+        }.get(self.tier, (210, 235, 255))
+        outline = (45, 55, 70)
+        cheek = (255, 165, 190)
 
         # ひるみ中は明るく点滅
         if getattr(self, "hurt_timer", 0.0) > 0:
             body = (min(255, body[0] + 45), min(255, body[1] + 45), min(255, body[2] + 45))
 
-        # ぷるぷる（呼吸みたいに脈動） + 耳が少し揺れる
-        # NOTE: 既存ゲームっぽい“タメ”より、ゆるキャラの「もにょもにょ」感
+        # ふわふわ（上下浮遊） + ぷるぷる
         pulse = 1.0 + math.sin(GLOBAL_T * 2.2 + self.anim_phase) * 0.04
-        ear_sway = math.sin(GLOBAL_T * 1.6 + self.anim_phase * 0.7) * (2.0 + 1.0 * self.size)
+        bob = math.sin(GLOBAL_T * 1.3 + self.anim_phase) * self.float_amp
 
         px = cx - cam_x
-        py = cy
+        py = cy + bob
 
         br = int(r * 1.05)
+        rr = int(br * sx * pulse)
 
-        # 耳（左右の丸）
-        ear_r = max(5, int(br * 0.35))
-        ear_y = int(py - br * 0.65)
-        ear_x_off = int(br * 0.55)
-        for sgn in (-1, 1):
-            ex = int(px + sgn * ear_x_off + sgn * ear_sway)
-            # 外枠
-            pygame.draw.circle(surf, outline, (ex, ear_y), ear_r + 3)
-            pygame.draw.circle(surf, body, (ex, ear_y), ear_r)
-            # 耳の内側
-            inner = (255, 220, 230)
-            pygame.draw.circle(surf, inner, (ex, ear_y), max(2, int(ear_r * 0.55)))
+        # おばけ本体（丸 + 下のひらひら）
+        # 上半分：丸
+        pygame.draw.circle(surf, outline, (int(px), int(py - rr * 0.20)), rr + 4)
+        pygame.draw.circle(surf, body, (int(px), int(py - rr * 0.20)), rr)
 
-        # 体（丸）
-        pygame.draw.circle(surf, outline, (int(px), int(py)), int(br * sx * pulse) + 4)
-        pygame.draw.circle(surf, body, (int(px), int(py)), int(br * sx * pulse))
+        # 下半分：ひらひら（3つの丸で簡単に）
+        flap_y = int(py + rr * 0.55)
+        flap_r = max(5, int(rr * 0.42))
+        for i in (-1, 0, 1):
+            fx = int(px + i * flap_r * 1.05)
+            pygame.draw.circle(surf, outline, (fx, flap_y), flap_r + 3)
+            pygame.draw.circle(surf, body, (fx, flap_y), flap_r)
 
-        # お腹（やさしい楕円）
-        belly_w = int(br * 1.10 * pulse)
-        belly_h = int(br * 0.85 * pulse)
-        belly_rect = pygame.Rect(0, 0, belly_w, belly_h)
-        belly_rect.center = (int(px), int(py + br * 0.25))
-        pygame.draw.ellipse(surf, belly, belly_rect)
+        # しっぽ/シーツっぽい影
+        if self.style == "sheet":
+            shadow = (170, 205, 235)
+            pygame.draw.ellipse(
+                surf,
+                shadow,
+                pygame.Rect(int(px - rr * 0.60), int(py + rr * 0.10), int(rr * 1.20), int(rr * 0.95)),
+            )
 
-        # 顔（ゆるめ）
-        face_col = (55, 45, 55)
-        ex_off = int(br * 0.36)
-        ey = int(py - br * 0.12)
-        eye_r = max(2, int(2.5 * self.size))
+        # 顔（バリエーション）
+        face_col = (35, 40, 55)
+        ex_off = int(rr * 0.38)
+        ey = int(py - rr * 0.10)
+        eye_r = max(2, int(2.6 * self.size))
 
-        # 瞬き中は目を線にする
+        # 瞬き中は目を線にする / 目スタイルで差を出す
         if self.blink_progress > 0:
             pygame.draw.line(surf, face_col, (int(px - ex_off - eye_r), ey), (int(px - ex_off + eye_r), ey), 2)
             pygame.draw.line(surf, face_col, (int(px + ex_off - eye_r), ey), (int(px + ex_off + eye_r), ey), 2)
         else:
-            pygame.draw.circle(surf, face_col, (int(px - ex_off), ey), eye_r)
-            pygame.draw.circle(surf, face_col, (int(px + ex_off), ey), eye_r)
+            if self.eye_style == "oval":
+                pygame.draw.ellipse(surf, face_col, pygame.Rect(int(px - ex_off - 2), ey - 3, 4, 6))
+                pygame.draw.ellipse(surf, face_col, pygame.Rect(int(px + ex_off - 2), ey - 3, 4, 6))
+            elif self.eye_style == "star":
+                # 星っぽい（小十字）
+                for sgn in (-1, 1):
+                    ex = int(px + sgn * ex_off)
+                    pygame.draw.line(surf, face_col, (ex - 2, ey), (ex + 2, ey), 2)
+                    pygame.draw.line(surf, face_col, (ex, ey - 2), (ex, ey + 2), 2)
+            else:
+                pygame.draw.circle(surf, face_col, (int(px - ex_off), ey), eye_r)
+                pygame.draw.circle(surf, face_col, (int(px + ex_off), ey), eye_r)
 
-        # 鼻（三角じゃなく丸いおにぎり風）
-        nose_col = (85, 65, 75)
-        pygame.draw.ellipse(surf, nose_col, pygame.Rect(int(px - br * 0.10), int(py + br * 0.02), int(br * 0.20), int(br * 0.15)))
-
-        # 口（小さく）
+        # 口（スタイルで差）
         mx = int(px)
-        my = int(py + br * 0.20)
-        pygame.draw.line(surf, face_col, (mx - 5, my), (mx + 5, my), 2)
+        my = int(py + rr * 0.18)
+        if self.style == "fang":
+            pygame.draw.line(surf, face_col, (mx - 6, my), (mx + 6, my), 2)
+            # 牙
+            pygame.draw.polygon(surf, face_col, [(mx - 2, my), (mx, my + 5), (mx + 2, my)])
+        elif self.style == "smile":
+            pygame.draw.arc(surf, face_col, pygame.Rect(mx - 8, my - 2, 16, 10), math.pi * 0.10, math.pi * 0.90, 2)
+        else:
+            pygame.draw.line(surf, face_col, (mx - 6, my), (mx + 6, my), 2)
 
-        # ほっぺ（薄め）
-        # ほっぺ：プレイヤーが近いほど濃く（照れ）
+        # ほっぺ（照れ：近いほど濃く）
         dist = getattr(self, "_player_dist", 9999.0)
-        # 近い=500px以内で徐々に濃く
-        t = clamp(1.0 - (dist / 520.0), 0.0, 1.0)
-        # 強すぎると変なので控えめに
-        t = t * 0.85
-        blush_base = (255, 155, 185)
-        # 濃く＝少し赤みを足す
+        t = clamp(1.0 - (dist / 520.0), 0.0, 1.0) * 0.85
         blush = (
-            int(blush_base[0]),
-            int(blush_base[1] * (1.0 - 0.25 * t)),
-            int(blush_base[2] * (1.0 - 0.30 * t)),
+            int(cheek[0]),
+            int(cheek[1] * (1.0 - 0.25 * t)),
+            int(cheek[2] * (1.0 - 0.30 * t)),
         )
         b_r = max(2, int(2 * self.size))
-        pygame.draw.circle(surf, blush, (int(px - br * 0.58), int(py + br * 0.10)), b_r)
-        pygame.draw.circle(surf, blush, (int(px + br * 0.58), int(py + br * 0.10)), b_r)
+        pygame.draw.circle(surf, blush, (int(px - rr * 0.58), int(py + rr * 0.05)), b_r)
+        pygame.draw.circle(surf, blush, (int(px + rr * 0.58), int(py + rr * 0.05)), b_r)
 
-        # 足（ぷにっと短い）
-        foot = (90, 80, 95)
-        fy = int(py + br * 0.85)
-        fx_off = int(br * 0.45)
-        fw = max(7, int(12 * self.size))
-        fh = max(5, int(7 * self.size))
-        pygame.draw.ellipse(surf, foot, pygame.Rect(int(px - fx_off - fw / 2), int(fy), fw, fh))
-        pygame.draw.ellipse(surf, foot, pygame.Rect(int(px + fx_off - fw / 2), int(fy), fw, fh))
+        # 足は無し（おばけなので）
 
 # =========================================================
 # Player
