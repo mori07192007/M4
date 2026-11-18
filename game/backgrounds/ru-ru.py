@@ -290,7 +290,16 @@ def _make_fonts():
 
 
 def run(w=1000, h=600):
-    pygame.init()
+    # NOTE:
+    # This screen is used both as a standalone script and as a scene launched
+    # from the integrated game.
+    #
+    # Therefore we must NOT call pygame.quit() when leaving this screen,
+    # otherwise we would shut down the whole game.
+    # We also avoid re-calling pygame.init() if pygame is already initialized.
+    if not pygame.get_init():
+        pygame.init()
+
     screen = pygame.display.set_mode((w, h))
     pygame.display.set_caption("ルール説明（背景単体）")
     clock = pygame.time.Clock()
@@ -582,7 +591,14 @@ def run(w=1000, h=600):
 
         pygame.display.flip()
 
-    pygame.quit()
+    # IMPORTANT:
+    # When used from the integrated game, we must NOT call pygame.quit() nor
+    # pygame.display.quit(). Both will de-initialize the video subsystem and the
+    # main game loop will crash on the next pygame.event.get().
+    #
+    # So we simply return here. If this file is executed standalone, the process
+    # ends anyway, so no explicit quit is required.
+    return
 
 
 if __name__ == "__main__":

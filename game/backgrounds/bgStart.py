@@ -9,7 +9,6 @@ def _draw_pixel_text(screen, text, x, y, scale=4, color=(255, 255, 255), bg=None
     Start画面を外部フォント無しで完結させるための簡易描画。
     対応していない文字はスペース扱いになります。
     """
-
     font = {
         "A": [
             "01110",
@@ -119,24 +118,6 @@ def _draw_pixel_text(screen, text, x, y, scale=4, color=(255, 255, 255), bg=None
             "00100",
             "00100",
         ],
-        "U": [
-            "10001",
-            "10001",
-            "10001",
-            "10001",
-            "10001",
-            "10001",
-            "01110",
-        ],
-        "V": [
-            "10001",
-            "10001",
-            "10001",
-            "10001",
-            "01010",
-            "01010",
-            "00100",
-        ],
         "Y": [
             "10001",
             "10001",
@@ -210,6 +191,7 @@ def _pixel_text_width(text, scale=4):
 
     文字種によっては未定義→スペース扱いになるので、len(text)ベースより正確。
     """
+
     # glyph is 5px wide and we keep 1px spacing => 6 "cells" per character
     # (スペースや未定義文字も同じ幅として扱う)
     return len(text) * 6 * scale
@@ -282,6 +264,7 @@ class StartScreenNeoFuturistic:
 
     def _load_player_image(self):
         """player_run.png を読み込み、描画用に少し加工したサーフェスを用意する。"""
+
         try:
             img = pygame.image.load(self.player_image_path)
             # convert_alpha は display.set_mode 前だと失敗することがあるので安全側で try。
@@ -562,6 +545,7 @@ class StartScreenNeoFuturistic:
 
     def _draw_center_player(self, screen):
         """スタート画面の中央に player_run.png を表示する。"""
+
         if self.player_img is None:
             return
 
@@ -656,7 +640,6 @@ def run(w=960, h=540):
     - Close window: quit.
     - Click anywhere: launch backgrounds/bgSea.py.
     """
-
     pygame.init()
     screen = pygame.display.set_mode((w, h))
     pygame.display.set_caption("Start")
@@ -670,13 +653,10 @@ def run(w=960, h=540):
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
                 running = False
-            elif e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
-                running = False
             elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
-                import runpy
-
-                pygame.quit()
-                runpy.run_path("/home/moe7514/M4/backgrounds/bgSea.py", run_name="__main__")
+                # NOTE:
+                # The integrated project uses `python -m game.main` as the single entrypoint.
+                # So we don't jump to other files here.
                 return
 
         start.update(dt)
