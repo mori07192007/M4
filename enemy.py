@@ -263,7 +263,8 @@ class Virus:
 
         # プレイヤーに向けて菌/炎を撃つ（一定間隔）
         self.shot_cd = random.uniform(0.9, 1.8)  # 初回は少しバラす
-        self.shot_interval = {"S": 1.35, "M": 1.10, "L": 0.85}.get(self.tier, 1.2)
+        # ちょっと投げすぎ感が出ないように間隔を広げる
+        self.shot_interval = {"S": 1.85, "M": 1.55, "L": 1.25}.get(self.tier, 1.6)
 
         # 移動範囲（そのへんで反転）
         self.patrol_left = self.x - 140
@@ -463,24 +464,22 @@ class Virus:
         px = cx - cam_x
         py = cy
 
-        # 体（少し縦長の楕円）
-        bw = int(r * 2.1 * sx)
-        bh = int(r * 2.35 * sy)
-        body_rect = pygame.Rect(0, 0, bw, bh)
-        body_rect.center = (int(px), int(py))
-        pygame.draw.ellipse(surf, outline, body_rect.inflate(6, 6))
-        pygame.draw.ellipse(surf, body, body_rect)
+        # 体（丸め：菌っぽく）
+        # 以前は縦長楕円だったので、円寄りに変更
+        br = int(r * 1.05)
+        # 外枠
+        pygame.draw.circle(surf, outline, (int(px), int(py)), int(br * sx) + 4)
+        # 本体
+        pygame.draw.circle(surf, body, (int(px), int(py)), int(br * sx))
 
-        # お腹
-        belly_rect = body_rect.inflate(-bw * 0.35, -bh * 0.35)
-        belly_rect.centery += int(bh * 0.10)
-        pygame.draw.ellipse(surf, belly, belly_rect)
+        # お腹（小さめ円）
+        pygame.draw.circle(surf, belly, (int(px), int(py + br * 0.22)), max(6, int(br * 0.55)))
 
         # 目（大きめ）
         eye_white = (255, 255, 255)
         eye_black = (25, 25, 35)
-        ex_off = int(bw * 0.16)
-        ey_off = int(-bh * 0.10)
+        ex_off = int(br * 0.38)
+        ey_off = int(-br * 0.18)
         eye_r = max(3, int(5 * self.size))
         for sgn in (-1, 1):
             ex = int(px + sgn * ex_off)
@@ -491,12 +490,12 @@ class Virus:
 
         # 口
         mouth_col = (60, 40, 40)
-        mw = int(bw * 0.22)
-        mh = int(bh * 0.10)
+        mw = int(br * 0.80)
+        mh = int(br * 0.45)
         pygame.draw.arc(
             surf,
             mouth_col,
-            pygame.Rect(int(px - mw / 2), int(py + bh * 0.05), mw, mh),
+            pygame.Rect(int(px - mw / 2), int(py + br * 0.10), mw, mh),
             math.pi * 0.05,
             math.pi * 0.95,
             2,
@@ -504,13 +503,13 @@ class Virus:
 
         # ほっぺ
         blush = (255, 120, 160)
-        pygame.draw.circle(surf, blush, (int(px - bw * 0.22), int(py + bh * 0.00)), max(2, int(2 * self.size)))
-        pygame.draw.circle(surf, blush, (int(px + bw * 0.22), int(py + bh * 0.00)), max(2, int(2 * self.size)))
+        pygame.draw.circle(surf, blush, (int(px - br * 0.72), int(py + br * 0.10)), max(2, int(2 * self.size)))
+        pygame.draw.circle(surf, blush, (int(px + br * 0.72), int(py + br * 0.10)), max(2, int(2 * self.size)))
 
         # 足（2本）
         foot = (90, 90, 100)
-        fy = body_rect.bottom - int(6 * self.size)
-        fx_off = int(bw * 0.18)
+        fy = int(py + br * 0.90)
+        fx_off = int(br * 0.42)
         fw = max(6, int(10 * self.size))
         fh = max(4, int(6 * self.size))
         pygame.draw.ellipse(surf, foot, pygame.Rect(int(px - fx_off - fw / 2), int(fy), fw, fh))
