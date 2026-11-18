@@ -732,7 +732,8 @@ while running:
     # ステージ表示＆残り討伐数
     remain = max(0, STAGE_TARGET_KILLS - stage_kills)
     screen.blit(font.render(f"STAGE {stage}/{STAGE_MAX}", True, (0, 0, 0)), (20, 60))
-    screen.blit(font.render(f"のこり {remain}体", True, (0, 0, 0)), (20, 130))
+    # 文字化けしないよう英語表記にする & PUSH ENTER! と重ならない位置へ
+    screen.blit(font.render(f"ENEMIES LEFT: {remain}", True, (0, 0, 0)), (20, 135))
 
     # 必殺技ゲージ（HPと同じバー表現）
     gauge_x, gauge_y = 20, 100
@@ -749,7 +750,8 @@ while running:
     if special_gauge >= MAX_GAUGE:
         if (pygame.time.get_ticks() // 300) % 2 == 0:
             ready = font.render("PUSH ENTER!", True, (120, 0, 200))
-            screen.blit(ready, (gauge_x, gauge_y + 26))
+            # 右側に寄せて、左上のテキストと重ならないようにする
+            screen.blit(ready, (gauge_x + 360, gauge_y + 26))
 
     # ダメージ数字（PCの上に浮かぶ）
     for dt in damage_texts[:]:
