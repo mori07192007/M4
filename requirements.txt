@@ -1,0 +1,4 @@
+# NOTE:
+# - `pygame` may require system build tools/SDL headers in some environments.
+# - `pygame-ce` is a community edition that often installs as a prebuilt wheel.
+pygame-ce>=2.5

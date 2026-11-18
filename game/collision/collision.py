@@ -1,21 +1,55 @@
+"""collision.py
+
+もともとは単体実行用の pygame スクリプトでしたが、main.py に統合して
+「bgSea を動かしている間も collision のゲームロジックを同じウィンドウ上で動かす」
+ために、外から呼べる API を追加しました。
+
+主な追加点:
+- init_collision(width, height): 外部(=main.py)の画面サイズに合わせて初期化
+- step_collision(dt, events, keys, screen): 1フレーム分の更新＆描画
+
+単体実行 (python collision/collision.py) も従来通り動くようにしています。
+"""
+
 import random
 import pygame
 import math
 
-pygame.init()
 
 # =========================
-# 画面設定
+# 画面設定（main.py から上書き可能）
 # =========================
 WIDTH = 1000
 HEIGHT = 600
 
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("大西先生 VS ウイルス")
+# main.py 側の display を壊さないため、ここでは set_mode しない。
+# 単体実行の場合だけ set_mode する。
+screen = None
 
-clock = pygame.time.Clock()
-font = pygame.font.Font(None, 40)
-big_font = pygame.font.Font(None, 80)
+clock = None
+font = None
+big_font = None
+
+# プレイヤー画像（main.py 側で差し込む）
+player_img = None
+
+
+def init_collision(width: int, height: int):
+    """main.py から呼び出す初期化。
+
+    pygame.init() 自体は main 側でも呼ばれる想定ですが、二重 init でも問題は起きづらいので
+    ここでも保険で呼びます。
+    """
+    global WIDTH, HEIGHT, clock, font, big_font
+    WIDTH, HEIGHT = int(width), int(height)
+
+    # pygame の各サブシステム初期化（安全のため）
+    if not pygame.get_init():
+        pygame.init()
+
+    clock = pygame.time.Clock()
+    font = pygame.font.Font(None, 40)
+    big_font = pygame.font.Font(None, 80)
 
 # =========================
 # 図形で“絵っぽく”描く関数（画像ファイル不要）
@@ -249,6 +283,421 @@ SPECIAL_EFFECT_FRAMES = 28
 running = True
 game_clear = False
 
+
+def _reset_game_state():
+    """ゲーム状態を初期状態に戻す（main.py 統合用）"""
+    global player_x, player_y
+    global base_speed, player_speed
+    global pc_hp, pc_hit_timer
+    global damage_texts, pickup_texts
+    global score, stage_kills
+    global special_gauge, special_effect_timer
+    global viruses, spawn_timer, boss_spawned
+    global items, item_timer
+    global vaccine_mode, vaccine_timer, ssd_timer
+    global attack, attack_timer
+    global projectiles, spray_block_x
+    global stage, game_clear
+
+    player_x, player_y = 200, 250
+    base_speed = 6
+    player_speed = base_speed
+
+    pc_hp = 100
+    pc_hit_timer = 0
+    damage_texts = []
+    pickup_texts = []
+
+    score = 0
+    stage_kills = 0
+
+    special_gauge = 0
+    special_effect_timer = 0
+
+    viruses = []
+    spawn_timer = 0
+    boss_spawned = False
+
+    items = []
+    item_timer = 0
+
+    vaccine_mode = False
+    vaccine_timer = 0
+    ssd_timer = 0
+
+    attack = False
+    attack_timer = 0
+
+    projectiles = []
+    spray_block_x = None
+
+    stage = 1
+    game_clear = False
+
+
+def step_collision(dt: float, events, keys, target_screen: pygame.Surface, *, draw_background: bool = False):
+    """collision の 1フレーム処理。
+
+    - dt: 秒
+    - events: main.py で取得したイベント列（pygame.event.get() の結果）
+    - keys: main.py で取得した押下状態（pygame.key.get_pressed()）
+    - target_screen: main.py の screen
+    - draw_background: True の場合のみ collision 側で screen.fill する。
+      （今回は bgSea を背景に使うので False 推奨）
+
+    戻り値:
+      {"running": bool, "game_clear": bool, "pc_hp": int, "stage": int}
+    """
+    global screen
+    global running, game_clear
+    global player_x, player_y, player_speed, base_speed
+    global pc_hp, pc_hit_timer
+    global damage_texts, pickup_texts
+    global score, stage_kills
+    global special_gauge, special_effect_timer
+    global viruses, spawn_timer, boss_spawned
+    global items, item_timer
+    global vaccine_mode, vaccine_timer, ssd_timer
+    global attack, attack_timer
+    global projectiles, spray_block_x
+    global stage
+
+    screen = target_screen
+
+    # ---------------------
+    # ステージ進行
+    # ---------------------
+    if stage_kills >= STAGE_TARGET_KILLS:
+        if stage < STAGE_MAX:
+            stage += 1
+            stage_kills = 0
+            viruses.clear()
+            projectiles.clear()
+            items.clear()
+            spawn_timer = 0
+            item_timer = 0
+            boss_spawned = False
+        else:
+            game_clear = True
+
+    # 難易度上昇（ステージで変化）
+    speed_bonus = (stage - 1) * 2
+
+    # ---------------------
+    # イベント（main の events を使う）
+    # ---------------------
+    for event in events:
+        if event.type == pygame.QUIT:
+            running = False
+
+        if event.type == pygame.KEYDOWN:
+            # 通常攻撃
+            if event.key == pygame.K_SPACE:
+                attack = True
+                attack_timer = SPRAY_DURATION_FRAMES
+                spray_block_x = None
+
+            # 必殺技
+            if event.key == pygame.K_RETURN:
+                if special_gauge >= MAX_GAUGE:
+                    viruses.clear()
+                    special_gauge = 0
+                    special_effect_timer = SPECIAL_EFFECT_FRAMES
+
+    # ---------------------
+    # 移動
+    # ---------------------
+    if keys[pygame.K_UP]:
+        player_y -= player_speed
+    if keys[pygame.K_DOWN]:
+        player_y += player_speed
+    if keys[pygame.K_LEFT]:
+        player_x -= player_speed
+    if keys[pygame.K_RIGHT]:
+        player_x += player_speed
+
+    player_x = max(0, min(player_x, WIDTH - 80))
+    player_y = max(0, min(player_y, HEIGHT - 80))
+
+    # ---------------------
+    # ウイルス生成
+    # ---------------------
+    spawn_timer += 1
+    spawn_interval = 70 if stage == 1 else 52 if stage == 2 else 40
+    if spawn_timer >= spawn_interval:
+        r = random.randint(1, 100)
+
+        boss_at = STAGE2_BOSS_AT_KILLS if stage == 2 else STAGE3_BOSS_AT_KILLS if stage == 3 else None
+        if boss_at is not None and (stage_kills >= boss_at) and not boss_spawned:
+            viruses.append(
+                {
+                    "x": WIDTH,
+                    "y": HEIGHT // 2,
+                    "speed": 3 + speed_bonus,
+                    "hp": 4 if stage == 2 else 5,
+                    "type": "boss",
+                }
+            )
+            boss_spawned = True
+            spawn_timer = 0
+        else:
+            normal_rate = 82 if stage == 1 else 65 if stage == 2 else 50
+            if r <= normal_rate:
+                viruses.append(
+                    {
+                        "x": WIDTH,
+                        "y": random.randint(50, 550),
+                        "speed": 4 + speed_bonus,
+                        "hp": 1,
+                        "type": "normal",
+                    }
+                )
+            else:
+                viruses.append(
+                    {
+                        "x": WIDTH,
+                        "y": random.randint(50, 550),
+                        "speed": 6 + speed_bonus,
+                        "hp": 2 if stage < 3 else 3,
+                        "type": "strong",
+                    }
+                )
+
+            spawn_timer = 0
+
+    # ---------------------
+    # アイテム生成
+    # ---------------------
+    item_timer += 1
+    if item_timer >= 600:
+        item_type = random.choice(["patch", "vaccine", "ssd"])
+        items.append({"x": WIDTH, "y": random.randint(50, 550), "type": item_type})
+        item_timer = 0
+
+    # ---------------------
+    # アイテム移動
+    # ---------------------
+    player_rect = pygame.Rect(player_x, player_y, 80, 80)
+    for item in items[:]:
+        item["x"] -= 4
+        item_rect = pygame.Rect(item["x"], item["y"], 56, 56)
+        if player_rect.colliderect(item_rect):
+            if item["type"] == "patch":
+                pc_hp = min(MAX_HP, pc_hp + 20)
+                got_text = "HEAL +20"
+                got_color = (0, 160, 60)
+            elif item["type"] == "vaccine":
+                vaccine_mode = True
+                vaccine_timer = 600
+                got_text = "POWER UP!"
+                got_color = (200, 120, 0)
+            else:
+                player_speed = 10
+                ssd_timer = 600
+                got_text = "SPEED UP!"
+                got_color = (0, 120, 220)
+
+            pickup_texts.append({"text": got_text, "x": player_x, "y": player_y - 30, "vy": -0.9, "timer": 45, "color": got_color})
+            items.remove(item)
+
+    # ---------------------
+    # ウイルス移動
+    # ---------------------
+    for virus in viruses[:]:
+        virus["x"] -= virus["speed"]
+        if virus["x"] < player_x + VIRUS_CURVE_START_X_OFFSET:
+            pc_target_y = 230 + 60
+            dy = pc_target_y - virus["y"]
+            virus["y"] += dy * VIRUS_CURVE_STRENGTH
+            virus["y"] = max(40, min(virus["y"], HEIGHT - 40))
+
+        if virus["x"] < 70:
+            if virus["type"] == "boss":
+                dmg = 30
+            elif virus["type"] == "strong":
+                dmg = 15
+            else:
+                dmg = 10
+
+            pc_hp = max(0, pc_hp - dmg)
+            pc_hit_timer = PC_HIT_EFFECT_FRAMES
+            damage_texts.append({"text": f"-{dmg}", "x": 60, "y": 220, "vy": -0.7, "timer": 40})
+            viruses.remove(virus)
+
+    # ---------------------
+    # 攻撃（スプレー）
+    # ---------------------
+    if attack:
+        attack_timer -= 1
+        shots = SPRAY_SHOTS_PER_FRAME + (1 if vaccine_mode else 0)
+        spread_deg = SPRAY_SPREAD_DEG + (6 if vaccine_mode else 0)
+        speed = SPRAY_SPEED + (2 if vaccine_mode else 0)
+        origin_x = player_x + 80
+        origin_y = player_y + 40
+        for _ in range(shots):
+            ang = math.radians(random.uniform(-spread_deg, spread_deg))
+            vx = math.cos(ang) * speed
+            vy = (math.sin(ang) * speed) + random.uniform(-SPRAY_VY_JITTER, SPRAY_VY_JITTER)
+            projectiles.append({"x": origin_x, "y": origin_y, "vx": vx, "vy": vy, "r": SPRAY_RADIUS})
+
+        if attack_timer <= 0:
+            attack = False
+            spray_block_x = None
+
+    # ---------------------
+    # 弾の更新＆当たり判定
+    # ---------------------
+    for p in projectiles[:]:
+        p["x"] += p["vx"]
+        p["y"] += p["vy"]
+        if spray_block_x is not None and p["x"] >= spray_block_x:
+            projectiles.remove(p)
+            continue
+        if p["x"] > WIDTH + 50 or p["y"] < -50 or p["y"] > HEIGHT + 50:
+            projectiles.remove(p)
+            continue
+
+        pr = p["r"]
+        bullet_rect = pygame.Rect(int(p["x"] - pr), int(p["y"] - pr), pr * 2, pr * 2)
+        hit = False
+        for virus in viruses[:]:
+            virus_rect = pygame.Rect(virus["x"] - 25, virus["y"] - 25, 50, 50)
+            if bullet_rect.colliderect(virus_rect):
+                if spray_block_x is None:
+                    spray_block_x = virus["x"]
+                virus["hp"] -= 1
+                hit = True
+                if virus["hp"] <= 0:
+                    viruses.remove(virus)
+                    score += 1
+                    stage_kills += 1
+                    special_gauge = min(MAX_GAUGE, special_gauge + GAUGE_GAIN_PER_KILL)
+                break
+        if hit:
+            projectiles.remove(p)
+
+    for p in projectiles[:]:
+        if p["x"] < -50:
+            projectiles.remove(p)
+
+    # ワクチン終了
+    if vaccine_mode:
+        vaccine_timer -= 1
+        if vaccine_timer <= 0:
+            vaccine_mode = False
+
+    # SSD終了
+    if player_speed > base_speed:
+        ssd_timer -= 1
+        if ssd_timer <= 0:
+            player_speed = base_speed
+
+    # ---------------------
+    # 描画（背景は main 側 / bgSea を使う）
+    # ---------------------
+    if draw_background:
+        screen.fill((220, 240, 255))
+
+    # 必殺技演出
+    if special_effect_timer > 0:
+        special_effect_timer -= 1
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        alpha = int(180 * (special_effect_timer / SPECIAL_EFFECT_FRAMES))
+        overlay.fill((255, 255, 255, alpha))
+        screen.blit(overlay, (0, 0))
+
+        if (special_effect_timer % 4) < 2:
+            text = big_font.render("SPECIAL!!", True, (140, 0, 220))
+            screen.blit(text, (WIDTH // 2 - text.get_width() // 2, 180))
+
+        for rr in range(40, 300, 40):
+            pygame.draw.circle(screen, (200, 140, 255), (WIDTH // 2, HEIGHT // 2), rr, 3)
+
+    # 必殺技ゲージ（時間でもじわじわ貯まる）
+    special_gauge = min(MAX_GAUGE, special_gauge + GAUGE_GAIN_PER_SECOND * dt)
+
+    # PC被弾エフェクト
+    if pc_hit_timer > 0:
+        pc_hit_timer -= 1
+
+    pc_x, pc_y = 20, 230
+    if pc_hit_timer > 0:
+        pc_x += random.randint(-2, 2)
+        pc_y += random.randint(-2, 2)
+        flash = pygame.Surface((160, 150), pygame.SRCALPHA)
+        alpha = 90 if (pc_hit_timer % 4) < 2 else 40
+        flash.fill((255, 60, 60, alpha))
+        screen.blit(flash, (pc_x - 8, pc_y - 8))
+
+    draw_pc(screen, pc_x, pc_y)
+    screen.blit(player_img, (player_x, player_y))
+
+    if attack:
+        pygame.draw.rect(screen, (255, 255, 160), (player_x + 70, player_y + 20, 30, 40), border_radius=8)
+
+    for p in projectiles:
+        pygame.draw.circle(screen, (255, 220, 0), (int(p["x"]), int(p["y"])), p["r"])
+
+    for virus in viruses:
+        draw_virus(screen, virus["type"], virus["x"], virus["y"])
+
+    for item in items:
+        draw_item(screen, item["type"], item["x"], item["y"])
+
+    # HPゲージ
+    hp_x, hp_y = 20, 20
+    hp_w, hp_h = 240, 22
+    pygame.draw.rect(screen, (30, 30, 30), (hp_x - 2, hp_y - 2, hp_w + 4, hp_h + 4), border_radius=6)
+    pygame.draw.rect(screen, (220, 220, 220), (hp_x, hp_y, hp_w, hp_h), border_radius=5)
+    hp_ratio = max(0.0, min(1.0, pc_hp / MAX_HP))
+    fill_w = int(hp_w * hp_ratio)
+    hp_color = (0, 200, 90) if hp_ratio >= 0.6 else (255, 180, 0) if hp_ratio >= 0.3 else (255, 70, 70)
+    pygame.draw.rect(screen, hp_color, (hp_x, hp_y, fill_w, hp_h), border_radius=5)
+    hp_text = font.render(f"HP {pc_hp}/{MAX_HP}", True, (0, 0, 0))
+    screen.blit(hp_text, (hp_x + 8, hp_y - 2))
+
+    # ゲージ
+    gx, gy = 20, 52
+    gw, gh = 240, 16
+    pygame.draw.rect(screen, (30, 30, 30), (gx - 2, gy - 2, gw + 4, gh + 4), border_radius=6)
+    pygame.draw.rect(screen, (230, 230, 230), (gx, gy, gw, gh), border_radius=5)
+    gr = max(0.0, min(1.0, special_gauge / MAX_GAUGE))
+    pygame.draw.rect(screen, (170, 90, 255), (gx, gy, int(gw * gr), gh), border_radius=5)
+    gtxt = font.render("SPECIAL", True, (0, 0, 0))
+    screen.blit(gtxt, (gx + 8, gy - 6))
+
+    # フローティングテキスト
+    for dtxt in damage_texts[:]:
+        dtxt["y"] += dtxt["vy"] * 60 * dt
+        dtxt["timer"] -= 1
+        surf = font.render(dtxt["text"], True, (255, 30, 30))
+        screen.blit(surf, (int(dtxt["x"]), int(dtxt["y"])))
+        if dtxt["timer"] <= 0:
+            damage_texts.remove(dtxt)
+
+    for pt in pickup_texts[:]:
+        pt["y"] += pt["vy"] * 60 * dt
+        pt["timer"] -= 1
+        surf = font.render(pt["text"], True, pt.get("color", (0, 0, 0)))
+        screen.blit(surf, (int(pt["x"]), int(pt["y"])))
+        if pt["timer"] <= 0:
+            pickup_texts.remove(pt)
+
+    # クリア/ゲームオーバーの表示（統合時は待機ループに入らず main に返す）
+    if game_clear:
+        screen.blit(big_font.render("CLEAR!", True, (0, 200, 0)), (WIDTH // 2 - 150, 200))
+        screen.blit(font.render("Enter/Clickで終了", True, (0, 0, 0)), (WIDTH // 2 - 140, 280))
+
+    if pc_hp <= 0:
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((40, 220, 80, 70))
+        screen.blit(overlay, (0, 0))
+        screen.blit(big_font.render("INFECTED", True, (0, 130, 0)), (240, 210))
+        screen.blit(big_font.render("GAME OVER", True, (255, 0, 0)), (180, 280))
+        screen.blit(font.render("Click / Enter to Exit", True, (0, 0, 0)), (340, 350))
+
+    return {"running": bool(running), "game_clear": bool(game_clear), "pc_hp": int(pc_hp), "stage": int(stage)}
+
 # =========================
 # ステージ
 # =========================
@@ -322,9 +771,44 @@ def show_title_screen():
             screen.blit(msg, (WIDTH // 2 - msg.get_width() // 2, 520))
 
         pygame.display.flip()
+ 
 
+def run_standalone():
+    """従来の単体実行モード（背景は collision 側で描画）"""
+    global screen, player_img, running
+
+    pygame.init()
+    init_collision(WIDTH, HEIGHT)
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("大西先生 VS ウイルス")
+
+    _reset_game_state()
+    show_title_screen()
+
+    player_img = pygame.image.load("player_idle.png")
+    player_img = pygame.transform.scale(player_img, (80, 80))
+
+    running = True
+    while running:
+        dt = clock.tick(60) / 1000.0
+        events = pygame.event.get()
+        keys = pygame.key.get_pressed()
+        step_collision(dt, events, keys, screen, draw_background=True)
+        pygame.display.flip()
+
+    pygame.quit()
+
+
+if __name__ == "__main__":
+    run_standalone()
+
+
+"""---- legacy loop below (kept as reference but disabled) ----
 
 show_title_screen()
+
+player_img = pygame.image.load("player_idle.png")
+player_img = pygame.transform.scale(player_img, (80, 80))
 
 while running:
     clock.tick(60)
@@ -687,7 +1171,7 @@ while running:
     draw_pc(screen, pc_x, pc_y)
 
     # プレイヤー
-    pygame.draw.rect(screen, (0, 100, 255), (player_x, player_y, 80, 80))
+    screen.blit(player_img, (player_x, player_y))
 
     # 攻撃（スプレー中の演出：少し光らせる）
     if attack:
@@ -880,3 +1364,4 @@ while running:
     pygame.display.flip()
 
 pygame.quit()
+"""
