@@ -177,6 +177,8 @@ MAX_GAUGE = 100
 GAUGE_GAIN_PER_KILL = 8
 GAUGE_GAIN_PER_SECOND = 0.6
 
+special_effect_timer = 0
+
 # =========================
 # ウイルス
 # =========================
@@ -227,6 +229,9 @@ VIRUS_CURVE_START_X_OFFSET = 30  # player_x + 30 を切ったら追尾開始
 
 # PCがダメージを受けた時の点滅/揺れエフェクト
 PC_HIT_EFFECT_FRAMES = 14
+
+# 必殺技エフェクト
+SPECIAL_EFFECT_FRAMES = 28
 
 running = True
 game_clear = False
@@ -326,6 +331,7 @@ while running:
                 if special_gauge >= MAX_GAUGE:
                     viruses.clear()
                     special_gauge = 0
+                    special_effect_timer = SPECIAL_EFFECT_FRAMES
 
     # ---------------------
     # 移動
@@ -556,6 +562,23 @@ while running:
     # 描画
     # ---------------------
     screen.fill((220, 240, 255))
+
+    # 必殺技演出（フラッシュ＋文字）
+    if special_effect_timer > 0:
+        special_effect_timer -= 1
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        # 最初は強く、後半は弱く
+        alpha = int(180 * (special_effect_timer / SPECIAL_EFFECT_FRAMES))
+        overlay.fill((255, 255, 255, alpha))
+        screen.blit(overlay, (0, 0))
+
+        if (special_effect_timer % 4) < 2:
+            text = big_font.render("SPECIAL!!", True, (140, 0, 220))
+            screen.blit(text, (WIDTH // 2 - text.get_width() // 2, 180))
+
+        # 爆風っぽい輪
+        for r in range(40, 300, 40):
+            pygame.draw.circle(screen, (200, 140, 255), (WIDTH // 2, HEIGHT // 2), r, 3)
 
     # ---------------------
     # 必殺技ゲージ（時間でもじわじわ貯まる）
