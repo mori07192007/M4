@@ -79,6 +79,65 @@ def weighted_choice(weights: dict):
 def clamp(v, a, b):
     return max(a, min(b, v))
 
+
+def lerp(a, b, t: float):
+    return a + (b - a) * t
+
+
+def lerp_col(c1, c2, t: float):
+    return (
+        int(lerp(c1[0], c2[0], t)),
+        int(lerp(c1[1], c2[1], t)),
+        int(lerp(c1[2], c2[2], t)),
+    )
+
+
+# ねねこ画像っぽい配色（厳密寄せのため固定）
+VIRUS_STYLE = {
+    # ぷち（白〜ピンク）
+    "S": {
+        "name": "petit",
+        "body": (255, 214, 236),
+        "shade": (255, 170, 214),
+        "outline": (60, 55, 70),
+        "cheek": (255, 138, 185),
+        "spike": (255, 170, 214),
+    },
+    # ほのお（紫〜赤紫 + 炎）
+    "M": {
+        "name": "fire",
+        "body": (196, 144, 255),
+        "shade": (150, 95, 230),
+        "outline": (40, 35, 60),
+        "cheek": (255, 150, 190),
+        "spike": (150, 95, 230),
+        "flame": (255, 120, 40),
+        "flame2": (255, 210, 90),
+    },
+    # ばちばち（ミント〜緑）
+    "L": {
+        "name": "spark",
+        "body": (182, 255, 228),
+        "shade": (110, 220, 170),
+        "outline": (35, 55, 55),
+        "cheek": (255, 160, 190),
+        "spike": (110, 220, 170),
+        "spark": (255, 240, 160),
+        "spark2": (160, 255, 235),
+    },
+    # ボス（濃い紫〜黒 + 王冠）
+    "B": {
+        "name": "boss",
+        "body": (88, 62, 118),
+        "shade": (60, 40, 92),
+        "outline": (18, 15, 28),
+        "cheek": (220, 120, 180),
+        "spike": (40, 25, 60),
+        "crown": (255, 214, 70),
+        "crown2": (255, 160, 60),
+    },
+}
+
 def aabb(ax, ay, aw, ah, bx, by, bw, bh):
     return ax < bx + bw and ax + aw > bx and ay < by + bh and ay + ah > by
 
@@ -149,9 +208,15 @@ class Projectile:
 # =========================================================
 class Virus:
     def __init__(self, x, y_ground, *, tier="S"):
-        # tier: "S" | "M" | "L"（大きいほど強い）
+        # ---------------------------------------------------------
+        # ねねこの画像（4体）に寄せた敵バリエーション
+        #  - tier="S" : ぷちウィルス（弱い）
+        #  - tier="M" : ほのおウィルス（中くらい：炎を投げやすい）
+        #  - tier="L" : ばちばちウィルス（大きめ：菌弾多め）
+        #  - tier="B" : ボスウィルス（強い：HP多め＆散布多め）
+        # ---------------------------------------------------------
         self.tier = tier
-        tier_size = {"S": 1.0, "M": 1.55, "L": 2.25}.get(tier, 1.0)
+        tier_size = {"S": 1.0, "M": 1.55, "L": 2.25, "B": 3.10}.get(tier, 1.0)
         self.size = float(tier_size)
         base = 46.0
         self.w = base * self.size
@@ -164,8 +229,8 @@ class Virus:
         # - HP: 大きいほど多い（踏むと1減る。HPが0で死亡演出→散布）
         # - 速度: 大きいほど遅い
         # - ばらまき弾数: 大きいほど多い（explode内で反映）
-        self.hp = {"S": 1, "M": 2, "L": 3}.get(tier, 1)
-        self.touch_damage = {"S": 1, "M": 2, "L": 3}.get(tier, 1)
+        self.hp = {"S": 1, "M": 2, "L": 3, "B": 10}.get(tier, 1)
+        self.touch_damage = {"S": 1, "M": 2, "L": 3, "B": 4}.get(tier, 1)
         self.speed = (78.0 / math.sqrt(self.size))  # big = slower
         self.dir = -1 if random.random() < 0.5 else 1
 
@@ -192,7 +257,7 @@ class Virus:
         # プレイヤーに向けて菌/炎を撃つ（一定間隔）
         self.shot_cd = random.uniform(0.9, 1.8)  # 初回は少しバラす
         # ちょっと投げすぎ感が出ないように間隔を広げる
-        self.shot_interval = {"S": 1.85, "M": 1.55, "L": 1.25}.get(self.tier, 1.6)
+        self.shot_interval = {"S": 1.95, "M": 1.45, "L": 1.20, "B": 0.85}.get(self.tier, 1.6)
 
         # 移動範囲（そのへんで反転）
         self.patrol_left = self.x - 140
@@ -218,7 +283,7 @@ class Virus:
         # 菌（直線弾）
         base_bullets = 4
         # tier/sizeで弾数を増やす
-        tier_bonus = {"S": 0, "M": 2, "L": 5}.get(self.tier, 0)
+        tier_bonus = {"S": 0, "M": 2, "L": 5, "B": 11}.get(self.tier, 0)
         count = max(2, round(base_bullets * self.size) + tier_bonus)
         spread = (math.pi * 0.70) + (self.size * 0.25)
         center = -math.pi / 2
@@ -234,7 +299,8 @@ class Virus:
             projectiles.append(Projectile("germ", cx, cy, math.cos(a) * sp, math.sin(a) * sp, palette=palette))
 
         # 炎（重力あり、数少なめ）
-        flames = max(1, round(1.2 * self.size))
+        # ボスだけさらに炎を多めに
+        flames = {"S": 1, "M": 2, "L": 2, "B": 5}.get(self.tier, max(1, round(1.2 * self.size)))
         for _ in range(flames):
             a = center + (random.random() - 0.5) * 0.8
             vx = math.cos(a) * 190
@@ -311,8 +377,12 @@ class Virus:
         nx = dx / dist
         ny = dy / dist
 
-        # Lは炎を混ぜやすい、Sは菌メイン
-        flame_chance = {"S": 0.12, "M": 0.22, "L": 0.40}.get(self.tier, 0.2)
+        # ねねこの画像のニュアンス：
+        # - ぷち: ほぼ菌
+        # - ほのお: 炎を投げやすい
+        # - ばちばち: 菌多め + 炎は少し
+        # - ボス: どちらも撃つ
+        flame_chance = {"S": 0.06, "M": 0.55, "L": 0.18, "B": 0.45}.get(self.tier, 0.2)
         shoot_flame = random.random() < flame_chance
 
         if shoot_flame:
@@ -346,15 +416,11 @@ class Virus:
         # 丸い“ウイルス”感は減らして、かわいい敵キャラっぽいシルエットにする
         r = min(self.w, self.h) * 0.45
 
-        # --- ウイルス系（かわいめ・オリジナル） ---
-        # 丸ベース + 控えめトゲ + 目口（個体差）で「形を凝る」
-        body = {
-            "S": (160, 245, 200),
-            "M": (255, 230, 150),
-            "L": (255, 175, 175),
-        }.get(self.tier, (160, 245, 200))
-        outline = (40, 45, 55)
-        cheek = (255, 135, 170)
+        # --- ねねこの画像っぽい4種に描き分け ---
+        st = VIRUS_STYLE.get(self.tier, VIRUS_STYLE["S"])
+        body = st["body"]
+        outline = st["outline"]
+        cheek = st["cheek"]
 
         # ひるみ中は明るく点滅
         if getattr(self, "hurt_timer", 0.0) > 0:
@@ -371,19 +437,88 @@ class Virus:
         rr = int(br * sx * pulse)
 
         # トゲ（先に外側へ描く）
-        spike_col = (90, 110, 110)
-        for i in range(self.spike_count):
-            a = (math.tau * i / self.spike_count) + self.spike_phase + math.sin(GLOBAL_T * 1.1 + self.anim_phase) * 0.05
-            x1 = px + math.cos(a) * (rr * 0.75)
-            y1 = py + math.sin(a) * (rr * 0.75)
-            x2 = px + math.cos(a) * (rr * 0.75 + self.spike_len)
-            y2 = py + math.sin(a) * (rr * 0.75 + self.spike_len)
+        spike_col = st.get("spike", (90, 110, 110))
+        # ぷちはトゲ少なめ、ボスは多め
+        spike_mul = {"S": 0.65, "M": 0.85, "L": 1.0, "B": 1.15}.get(self.tier, 1.0)
+        spike_cnt = max(4, int(self.spike_count * spike_mul))
+        spike_len = self.spike_len * ({"S": 0.55, "M": 0.85, "L": 1.0, "B": 1.10}.get(self.tier, 1.0))
+        for i in range(spike_cnt):
+            a = (math.tau * i / spike_cnt) + self.spike_phase + math.sin(GLOBAL_T * 1.1 + self.anim_phase) * 0.05
+            x1 = px + math.cos(a) * (rr * 0.76)
+            y1 = py + math.sin(a) * (rr * 0.76)
+            x2 = px + math.cos(a) * (rr * 0.76 + spike_len)
+            y2 = py + math.sin(a) * (rr * 0.76 + spike_len)
             pygame.draw.line(surf, spike_col, (x1, y1), (x2, y2), 3)
             pygame.draw.circle(surf, spike_col, (int(x2), int(y2)), 3)
+
+        # ほのお（M）: 炎っぽい粒
+        if self.tier == "M":
+            f1 = st.get("flame", (255, 120, 40))
+            f2 = st.get("flame2", (255, 210, 90))
+            rng = random.Random(int((GLOBAL_T + self.anim_phase) * 10_000))
+            for _ in range(7):
+                aa = rng.random() * math.tau
+                rad = rr * rng.uniform(0.85, 1.25)
+                fx = int(px + math.cos(aa) * rad)
+                fy = int(py + math.sin(aa) * rad)
+                col = f1 if rng.random() < 0.6 else f2
+                pygame.draw.circle(surf, col, (fx, fy), rng.randint(2, 4))
+
+        # ばちばち（L）: スパーク（ジグザグ線 + 粒）
+        if self.tier == "L":
+            s1 = st.get("spark", (255, 240, 160))
+            s2 = st.get("spark2", (160, 255, 235))
+            rng = random.Random(int((GLOBAL_T * 1000) + self.anim_phase * 10000))
+            for _ in range(3):
+                aa = rng.random() * math.tau
+                r0 = rr * 1.05
+                x0 = px + math.cos(aa) * r0
+                y0 = py + math.sin(aa) * r0
+                # 小さいジグザグ
+                pts = []
+                steps = 4
+                for k in range(steps + 1):
+                    t = k / steps
+                    off = (rng.random() - 0.5) * rr * 0.25
+                    xx = x0 + math.cos(aa) * (rr * 0.35 * t) + math.cos(aa + math.pi / 2) * off
+                    yy = y0 + math.sin(aa) * (rr * 0.35 * t) + math.sin(aa + math.pi / 2) * off
+                    pts.append((xx, yy))
+                pygame.draw.lines(surf, s1, False, pts, 2)
+                pygame.draw.circle(surf, s2, (int(pts[-1][0]), int(pts[-1][1])), 3)
+
+        # ボス（B）: 王冠
+        if self.tier == "B":
+            crown = st.get("crown", (255, 214, 70))
+            crown2 = st.get("crown2", (255, 160, 60))
+            top_y = py - rr * 1.05
+            base_w = rr * 0.95
+            base_h = rr * 0.35
+            rect = pygame.Rect(int(px - base_w / 2), int(top_y - base_h), int(base_w), int(base_h))
+            pygame.draw.rect(surf, crown, rect, border_radius=6)
+            # 3つ山
+            peaks = [(-0.35, -0.10), (0.0, -0.28), (0.35, -0.10)]
+            for xo, yo in peaks:
+                tri = [
+                    (px + xo * base_w * 0.9 - 10, top_y - base_h),
+                    (px + xo * base_w * 0.9 + 10, top_y - base_h),
+                    (px + xo * base_w * 0.9, top_y - base_h - rr * 0.28),
+                ]
+                pygame.draw.polygon(surf, crown2, tri)
+            pygame.draw.circle(surf, (255, 90, 120), (int(px), int(top_y - base_h - rr * 0.20)), 4)
 
         # 本体（丸）
         pygame.draw.circle(surf, outline, (int(px), int(py)), rr + 5)
         pygame.draw.circle(surf, body, (int(px), int(py)), rr)
+
+        # 影/グラデっぽい面（画像寄せ）
+        shade = st.get("shade")
+        if shade:
+            pygame.draw.circle(
+                surf,
+                lerp_col(shade, body, 0.35),
+                (int(px + rr * 0.18), int(py + rr * 0.18)),
+                int(rr * 0.78),
+            )
 
         # 内側の模様（個体差）
         if self.style in ("sleepy", "wink"):
@@ -512,11 +647,13 @@ def spawn_for_segment(seg):
     # ここを増やせば「画面が変わるごとに出現」になる
     # 画面が変わるごとに、S/M/Lの敵を出す
     spawns = {
-        0: [(520, "S"), (780, "M")],
-        1: [(SEGMENT_W + 600, "L")],
-        2: [(SEGMENT_W*2 + 520, "S"), (SEGMENT_W*2 + 700, "S"), (SEGMENT_W*2 + 860, "L")],
-        3: [(SEGMENT_W*3 + 720, "M"), (SEGMENT_W*3 + 860, "M")],
-        4: [(SEGMENT_W*4 + 760, "L")],
+        # 画像の4種が「最初から分かる」ように各区画へ配置
+        0: [(520, "S"), (720, "M"), (880, "L")],
+        1: [(SEGMENT_W + 520, "S"), (SEGMENT_W + 760, "M")],
+        2: [(SEGMENT_W * 2 + 520, "L"), (SEGMENT_W * 2 + 760, "S"), (SEGMENT_W * 2 + 900, "M")],
+        3: [(SEGMENT_W * 3 + 620, "L"), (SEGMENT_W * 3 + 820, "M")],
+        # 最後の区画にボス
+        4: [(SEGMENT_W * 4 + 760, "B")],
     }
 
     viruses = []
