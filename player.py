@@ -192,6 +192,10 @@ viruses = []
 spawn_timer = 0
 boss_spawned = False
 
+# ステージ内でボスを出すか（出すなら何体倒したタイミングで出すか）
+STAGE2_BOSS_AT_KILLS = 6
+STAGE3_BOSS_AT_KILLS = 6
+
 # =========================
 # アイテム
 # =========================
@@ -396,34 +400,50 @@ while running:
     if spawn_timer >= spawn_interval:
         r = random.randint(1, 100)
 
-        # ステージが上がると強い敵が出やすい
-        normal_rate = 82 if stage == 1 else 65 if stage == 2 else 50
-
-        if r <= normal_rate:
+        # ステージ2/3は途中でボスを1回だけ出す
+        boss_at = STAGE2_BOSS_AT_KILLS if stage == 2 else STAGE3_BOSS_AT_KILLS if stage == 3 else None
+        if boss_at is not None and (stage_kills >= boss_at) and not boss_spawned:
             viruses.append(
                 {
                     "x": WIDTH,
-                    "y": random.randint(50, 550),
-                    "speed": 4 + speed_bonus,
-                    # 弱：スプレー1回分くらいで倒せる
-                    "hp": 1,
-                    "type": "normal",
+                    "y": HEIGHT // 2,
+                    "speed": 3 + speed_bonus,
+                    "hp": 4 if stage == 2 else 5,
+                    "type": "boss",
                 }
             )
-
+            boss_spawned = True
+            spawn_timer = 0
         else:
-            viruses.append(
-                {
-                    "x": WIDTH,
-                    "y": random.randint(50, 550),
-                    "speed": 6 + speed_bonus,
-                    # 強：スプレー2回分くらいで倒せる
-                    "hp": 2 if stage < 3 else 3,
-                    "type": "strong",
-                }
-            )
 
-        spawn_timer = 0
+            # ステージが上がると強い敵が出やすい
+            normal_rate = 82 if stage == 1 else 65 if stage == 2 else 50
+
+            if r <= normal_rate:
+                viruses.append(
+                    {
+                        "x": WIDTH,
+                        "y": random.randint(50, 550),
+                        "speed": 4 + speed_bonus,
+                        # 弱：スプレー1回分くらいで倒せる
+                        "hp": 1,
+                        "type": "normal",
+                    }
+                )
+
+            else:
+                viruses.append(
+                    {
+                        "x": WIDTH,
+                        "y": random.randint(50, 550),
+                        "speed": 6 + speed_bonus,
+                        # 強：スプレー2回分くらいで倒せる
+                        "hp": 2 if stage < 3 else 3,
+                        "type": "strong",
+                    }
+                )
+
+            spawn_timer = 0
 
     # ---------------------
     # アイテム生成
