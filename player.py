@@ -155,6 +155,7 @@ player_speed = base_speed
 # HP
 # =========================
 pc_hp = 100
+MAX_HP = 100
 
 # PC被弾エフェクト用
 pc_hit_timer = 0
@@ -415,7 +416,7 @@ while running:
 
         if player_rect.colliderect(item_rect):
             if item["type"] == "patch":
-                pc_hp = min(100, pc_hp + 20)
+                pc_hp = min(MAX_HP, pc_hp + 20)
 
             elif item["type"] == "vaccine":
                 vaccine_mode = True
@@ -581,7 +582,19 @@ while running:
     for item in items:
         draw_item(screen, item["type"], item["x"], item["y"])
 
-    screen.blit(font.render(f"HP: {pc_hp}", True, (0, 0, 0)), (20, 20))
+    # HPゲージ
+    hp_x, hp_y = 20, 20
+    hp_w, hp_h = 240, 22
+    pygame.draw.rect(screen, (30, 30, 30), (hp_x - 2, hp_y - 2, hp_w + 4, hp_h + 4), border_radius=6)
+    pygame.draw.rect(screen, (220, 220, 220), (hp_x, hp_y, hp_w, hp_h), border_radius=5)
+
+    hp_ratio = max(0.0, min(1.0, pc_hp / MAX_HP))
+    fill_w = int(hp_w * hp_ratio)
+    hp_color = (0, 200, 90) if hp_ratio >= 0.6 else (255, 180, 0) if hp_ratio >= 0.3 else (255, 60, 60)
+    if fill_w > 0:
+        pygame.draw.rect(screen, hp_color, (hp_x, hp_y, fill_w, hp_h), border_radius=5)
+
+    screen.blit(font.render(f"HP {pc_hp}/{MAX_HP}", True, (0, 0, 0)), (hp_x + hp_w + 12, hp_y - 6))
     screen.blit(font.render(f"SCORE: {score}", True, (0, 0, 0)), (20, 60))
     screen.blit(
         font.render(f"GAUGE: {special_gauge}/{MAX_GAUGE}", True, (0, 0, 0)),
