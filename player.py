@@ -646,7 +646,12 @@ while running:
         dt["timer"] -= 1
         # だんだん薄く
         alpha = max(0, min(255, int(255 * (dt["timer"] / 40))))
+        # 文字を大きく（既存fontは40なので、スケールして強調）
         surf = font.render(dt["text"], True, (255, 0, 0))
+        surf = pygame.transform.smoothscale(
+            surf,
+            (int(surf.get_width() * 1.6), int(surf.get_height() * 1.6)),
+        )
         surf.set_alpha(alpha)
         screen.blit(surf, (int(dt["x"]), int(dt["y"])))
         if dt["timer"] <= 0:
