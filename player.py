@@ -731,7 +731,7 @@ while running:
 
     # 残り討伐数（ステージ表記は不要とのことなので消す）
     remain = max(0, STAGE_TARGET_KILLS - stage_kills)
-    screen.blit(font.render(f"ENEMIES LEFT: {remain}", True, (0, 0, 0)), (20, 60))
+    screen.blit(font.render(f"ENEMIES LEFT: {remain}", True, (0, 0, 0)), (20, 150))
 
     # 必殺技ゲージ（HPと同じバー表現）
     # ステージ表記を消した分、ゲージを上に詰める
