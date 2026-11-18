@@ -613,10 +613,6 @@ while running:
                 virus["hp"] -= 1
                 hit = True
                 if virus["hp"] <= 0:
-                    # ボスを倒したらクリア
-                    if virus.get("type") == "boss":
-                        game_clear = True
-
                     viruses.remove(virus)
                     score += 1
                     stage_kills += 1
