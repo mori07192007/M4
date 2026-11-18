@@ -79,9 +79,26 @@ except Exception as ex:
         f"詳細: {ex}"
     )
 
-img_idle = pygame.transform.smoothscale(img_idle, (player.w, player.h))
-img_run = pygame.transform.smoothscale(img_run, (player.w, player.h))
-img_jump = pygame.transform.smoothscale(img_jump, (player.w, player.h))
+def fit_to_box(img: pygame.Surface, box_w: int, box_h: int) -> pygame.Surface:
+    """画像の縦横比を維持したまま、当たり判定サイズの箱に収まるようにリサイズする。"""
+    iw, ih = img.get_width(), img.get_height()
+    if iw <= 0 or ih <= 0:
+        return pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+    scale = min(box_w / iw, box_h / ih)
+    nw = max(1, int(round(iw * scale)))
+    nh = max(1, int(round(ih * scale)))
+    return pygame.transform.smoothscale(img, (nw, nh))
+
+
+def blit_center(dst: pygame.Surface, img: pygame.Surface, x: int, y: int, box_w: int, box_h: int):
+    """(x,y,box_w,box_h) の箱の中央に画像を描画する。"""
+    dst.blit(img, (x + (box_w - img.get_width()) // 2, y + (box_h - img.get_height()) // 2))
+
+
+# 縦横比維持でフィット（停止画像だけ横長でも潰れない）
+img_idle = fit_to_box(img_idle, player.w, player.h)
+img_run = fit_to_box(img_run, player.w, player.h)
+img_jump = fit_to_box(img_jump, player.w, player.h)
 
 facing_right = True
 
@@ -290,7 +307,8 @@ while running:
     if not facing_right:
         img = pygame.transform.flip(img, True, False)
 
-    screen.blit(img, (px, player.y))
+    # サイズがRectと一致しない（縦横比維持で縮小されている）場合があるので中央に配置
+    blit_center(screen, img, px, player.y, player.w, player.h)
 
     # HUD
     hud = f"Move: LEFT/RIGHT   Jump: UP   R: reset   TIME: {clear_time:0.2f}s"
