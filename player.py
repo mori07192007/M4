@@ -156,6 +156,9 @@ player_speed = base_speed
 # =========================
 pc_hp = 100
 
+# PC被弾エフェクト用
+pc_hit_timer = 0
+
 # =========================
 # スコア
 # =========================
@@ -209,7 +212,14 @@ SPRAY_RADIUS = 6           # 弾の半径
 projectiles = []  # {"x","y","vx","vy","r"}
 
 # ウイルスがPC(左側)に向かってカーブして寄っていく強さ
-VIRUS_CURVE_STRENGTH = 0.06  # 大きいほどY方向に吸い寄せられる
+VIRUS_CURVE_STRENGTH = 0.08  # 大きいほどY方向に吸い寄せられる
+
+# どのラインを超えたら「PCに向かってカーブ開始」するか
+# （= プレイヤーを過ぎたら、という条件）
+VIRUS_CURVE_START_X_OFFSET = 30  # player_x + 30 を切ったら追尾開始
+
+# PCがダメージを受けた時の点滅/揺れエフェクト
+PC_HIT_EFFECT_FRAMES = 14
 
 running = True
 game_clear = False
@@ -423,13 +433,14 @@ while running:
     for virus in viruses[:]:
         virus["x"] -= virus["speed"]
 
-        # PC（左側）に近づくようにY方向も少しずつ曲げる
-        # PCの中心を狙う：draw_pc(screen, 20, 230) のだいたい中心
-        pc_target_y = 230 + 60  # PC全体の中心っぽいY
-        dy = pc_target_y - virus["y"]
-        # 距離が遠いほどゆるく、近いほど強めに寄せる（簡易）
-        virus["y"] += dy * VIRUS_CURVE_STRENGTH
-        virus["y"] = max(40, min(virus["y"], HEIGHT - 40))
+        # 「プレイヤーを過ぎたら」PCに向かってカーブさせる
+        # （プレイヤーより左側に入ったら、PC中心へ吸い寄せる）
+        if virus["x"] < player_x + VIRUS_CURVE_START_X_OFFSET:
+            # PCの中心を狙う：draw_pc(screen, 20, 230) のだいたい中心
+            pc_target_y = 230 + 60  # PC全体の中心っぽいY
+            dy = pc_target_y - virus["y"]
+            virus["y"] += dy * VIRUS_CURVE_STRENGTH
+            virus["y"] = max(40, min(virus["y"], HEIGHT - 40))
 
         if virus["x"] < 70:
             if virus["type"] == "boss":
@@ -438,6 +449,8 @@ while running:
                 pc_hp -= 15
             else:
                 pc_hp -= 10
+
+            pc_hit_timer = PC_HIT_EFFECT_FRAMES
 
             viruses.remove(virus)
 
@@ -522,8 +535,23 @@ while running:
     # ---------------------
     screen.fill((220, 240, 255))
 
+    # PC被弾エフェクト（点滅＋微振動）
+    if pc_hit_timer > 0:
+        pc_hit_timer -= 1
+
+    pc_x, pc_y = 20, 230
+    if pc_hit_timer > 0:
+        # 小さく揺らす
+        pc_x += random.randint(-2, 2)
+        pc_y += random.randint(-2, 2)
+        # 赤いフラッシュ（薄い矩形）
+        flash = pygame.Surface((160, 150), pygame.SRCALPHA)
+        alpha = 90 if (pc_hit_timer % 4) < 2 else 40
+        flash.fill((255, 60, 60, alpha))
+        screen.blit(flash, (pc_x - 8, pc_y - 8))
+
     # パソコン（それっぽく）
-    draw_pc(screen, 20, 230)
+    draw_pc(screen, pc_x, pc_y)
 
     # プレイヤー
     pygame.draw.rect(screen, (0, 100, 255), (player_x, player_y, 80, 80))
