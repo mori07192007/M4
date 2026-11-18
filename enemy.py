@@ -236,8 +236,11 @@ class Projectile:
 # Virus enemy
 # =========================================================
 class Virus:
-    def __init__(self, x, y_ground, size=1.0):
-        self.size = float(size)
+    def __init__(self, x, y_ground, *, tier="S"):
+        # tier: "S" | "M" | "L"（大きいほど強い）
+        self.tier = tier
+        tier_size = {"S": 1.0, "M": 1.55, "L": 2.25}.get(tier, 1.0)
+        self.size = float(tier_size)
         base = 46.0
         self.w = base * self.size
         self.h = base * self.size
@@ -245,10 +248,13 @@ class Virus:
         self.x = float(x)
         self.y = float(y_ground - self.h)
 
-        # 大きいほど強い（例）
-        self.hp = max(1, round(1 * self.size))
-        self.touch_damage = max(1, round(1 * self.size))
-        self.speed = (65.0 / math.sqrt(self.size))  # big = slower
+        # 大きいほど強い（明確に数値化）
+        # - HP: 大きいほど多い（踏むと1減る。HPが0で死亡演出→散布）
+        # - 速度: 大きいほど遅い
+        # - ばらまき弾数: 大きいほど多い（explode内で反映）
+        self.hp = {"S": 1, "M": 2, "L": 3}.get(tier, 1)
+        self.touch_damage = {"S": 1, "M": 2, "L": 3}.get(tier, 1)
+        self.speed = (78.0 / math.sqrt(self.size))  # big = slower
         self.dir = -1 if random.random() < 0.5 else 1
 
         self.dead = False
@@ -262,8 +268,15 @@ class Virus:
     def stomped(self):
         if self.dead:
             return
-        self.dead = True
-        self.death_timer = 0.18  # 演出→散布
+
+        # 踏まれるとHPを減らす（大きい敵は複数回踏まないと倒れない）
+        self.hp -= 1
+        if self.hp <= 0:
+            self.dead = True
+            self.death_timer = 0.18  # 演出→散布
+        else:
+            # まだ生きている：短いひるみ（見た目で分かるように）
+            self.hurt_timer = 0.12
 
     def explode(self, projectiles, *, theme=None):
         cx = self.x + self.w / 2
@@ -271,7 +284,9 @@ class Virus:
 
         # 菌（直線弾）
         base_bullets = 4
-        count = max(2, round(base_bullets * self.size))
+        # tier/sizeで弾数を増やす
+        tier_bonus = {"S": 0, "M": 2, "L": 5}.get(self.tier, 0)
+        count = max(2, round(base_bullets * self.size) + tier_bonus)
         spread = (math.pi * 0.70) + (self.size * 0.25)
         center = -math.pi / 2
 
@@ -319,6 +334,13 @@ class Virus:
             projectiles.append(Projectile("flame", cx, self.y + 10, vx, vy))
 
     def update(self, dt, projectiles, *, theme=None):
+        # 被弾（踏まれ）ひるみ
+        if not hasattr(self, "hurt_timer"):
+            self.hurt_timer = 0.0
+
+        if self.hurt_timer > 0:
+            self.hurt_timer -= dt
+
         if self.dead:
             self.death_timer -= dt
             if self.death_timer <= 0:
@@ -326,7 +348,9 @@ class Virus:
                 self.remove = True
             return
 
-        self.x += self.speed * self.dir * dt
+        # ひるみ中は動きを少し止める
+        if self.hurt_timer <= 0:
+            self.x += self.speed * self.dir * dt
         if self.x < self.patrol_left:
             self.x = self.patrol_left
             self.dir = 1
@@ -349,7 +373,16 @@ class Virus:
             sy = 1 - p * 0.55
 
         r = min(self.w, self.h) * 0.45
-        body = (124, 255, 169)
+        # tierごとに本体色を変える（強さが分かりやすい）
+        body = {
+            "S": (124, 255, 169),
+            "M": (255, 220, 120),
+            "L": (255, 150, 150),
+        }.get(self.tier, (124, 255, 169))
+
+        # ひるみ中は明るく点滅
+        if getattr(self, "hurt_timer", 0.0) > 0:
+            body = (min(255, body[0] + 50), min(255, body[1] + 50), min(255, body[2] + 50))
         spike = (42, 224, 122)
 
         rect = pygame.Rect(0, 0, int(r * 2 * sx), int(r * 2 * sy))
@@ -423,17 +456,18 @@ def segment_index(x):
 def spawn_for_segment(seg):
     # 区画ごとに敵を固定で出す（例）
     # ここを増やせば「画面が変わるごとに出現」になる
+    # 画面が変わるごとに、S/M/Lの敵を出す
     spawns = {
-        0: [(520, 1.0), (780, 1.5)],
-        1: [(SEGMENT_W + 600, 2.2)],
-        2: [(SEGMENT_W*2 + 520, 1.0), (SEGMENT_W*2 + 700, 1.0), (SEGMENT_W*2 + 840, 2.2)],
-        3: [(SEGMENT_W*3 + 720, 1.5), (SEGMENT_W*3 + 860, 1.5)],
-        4: [(SEGMENT_W*4 + 760, 2.2)],
+        0: [(520, "S"), (780, "M")],
+        1: [(SEGMENT_W + 600, "L")],
+        2: [(SEGMENT_W*2 + 520, "S"), (SEGMENT_W*2 + 700, "S"), (SEGMENT_W*2 + 860, "L")],
+        3: [(SEGMENT_W*3 + 720, "M"), (SEGMENT_W*3 + 860, "M")],
+        4: [(SEGMENT_W*4 + 760, "L")],
     }
 
     viruses = []
-    for x, size in spawns.get(seg, []):
-        viruses.append(Virus(x, GROUND_Y, size))
+    for x, tier in spawns.get(seg, []):
+        viruses.append(Virus(x, GROUND_Y, tier=tier))
     return viruses
 
 # =========================================================
