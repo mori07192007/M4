@@ -460,7 +460,7 @@ while running:
             else:
                 dmg = 10
 
-            pc_hp -= dmg
+            pc_hp = max(0, pc_hp - dmg)
             pc_hit_timer = PC_HIT_EFFECT_FRAMES
 
             # PC上にダメージ表示
