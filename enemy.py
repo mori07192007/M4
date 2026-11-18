@@ -448,14 +448,16 @@ class Virus:
         # 丸い“ウイルス”感は減らして、かわいい敵キャラっぽいシルエットにする
         r = min(self.w, self.h) * 0.45
 
-        # tierごとにカラー（分かりやすい）
+        # --- ゆるキャラ風（クマっぽい・オリジナル） ---
+        # 3) ピンクベージュ系
+        # tierは“強さ”なので、色の差は控えめにして少しだけ濃淡で表現
         body = {
-            "S": (155, 235, 180),
-            "M": (255, 210, 120),
-            "L": (255, 160, 160),
-        }.get(self.tier, (155, 235, 180))
-        outline = (35, 35, 45)
-        belly = (245, 245, 245)
+            "S": (248, 200, 210),
+            "M": (242, 178, 196),
+            "L": (236, 150, 176),
+        }.get(self.tier, (242, 178, 196))
+        outline = (55, 45, 55)
+        belly = (255, 245, 248)
 
         # ひるみ中は明るく点滅
         if getattr(self, "hurt_timer", 0.0) > 0:
@@ -464,54 +466,61 @@ class Virus:
         px = cx - cam_x
         py = cy
 
-        # 体（丸め：菌っぽく）
-        # 以前は縦長楕円だったので、円寄りに変更
         br = int(r * 1.05)
-        # 外枠
+
+        # 耳（左右の丸）
+        ear_r = max(5, int(br * 0.35))
+        ear_y = int(py - br * 0.65)
+        ear_x_off = int(br * 0.55)
+        for sgn in (-1, 1):
+            ex = int(px + sgn * ear_x_off)
+            # 外枠
+            pygame.draw.circle(surf, outline, (ex, ear_y), ear_r + 3)
+            pygame.draw.circle(surf, body, (ex, ear_y), ear_r)
+            # 耳の内側
+            inner = (255, 220, 230)
+            pygame.draw.circle(surf, inner, (ex, ear_y), max(2, int(ear_r * 0.55)))
+
+        # 体（丸）
         pygame.draw.circle(surf, outline, (int(px), int(py)), int(br * sx) + 4)
-        # 本体
         pygame.draw.circle(surf, body, (int(px), int(py)), int(br * sx))
 
-        # お腹（小さめ円）
-        pygame.draw.circle(surf, belly, (int(px), int(py + br * 0.22)), max(6, int(br * 0.55)))
+        # お腹（やさしい楕円）
+        belly_w = int(br * 1.10)
+        belly_h = int(br * 0.85)
+        belly_rect = pygame.Rect(0, 0, belly_w, belly_h)
+        belly_rect.center = (int(px), int(py + br * 0.25))
+        pygame.draw.ellipse(surf, belly, belly_rect)
 
-        # 目（大きめ）
-        eye_white = (255, 255, 255)
-        eye_black = (25, 25, 35)
-        ex_off = int(br * 0.38)
-        ey_off = int(-br * 0.18)
-        eye_r = max(3, int(5 * self.size))
-        for sgn in (-1, 1):
-            ex = int(px + sgn * ex_off)
-            ey = int(py + ey_off)
-            pygame.draw.circle(surf, eye_white, (ex, ey), eye_r + 2)
-            pygame.draw.circle(surf, eye_black, (ex, ey), eye_r)
-            pygame.draw.circle(surf, (255, 255, 255), (ex - 1, ey - 1), max(1, eye_r // 2))
+        # 顔（ゆるめ）
+        face_col = (55, 45, 55)
+        ex_off = int(br * 0.36)
+        ey = int(py - br * 0.12)
+        eye_r = max(2, int(2.5 * self.size))
+        pygame.draw.circle(surf, face_col, (int(px - ex_off), ey), eye_r)
+        pygame.draw.circle(surf, face_col, (int(px + ex_off), ey), eye_r)
 
-        # 口
-        mouth_col = (60, 40, 40)
-        mw = int(br * 0.80)
-        mh = int(br * 0.45)
-        pygame.draw.arc(
-            surf,
-            mouth_col,
-            pygame.Rect(int(px - mw / 2), int(py + br * 0.10), mw, mh),
-            math.pi * 0.05,
-            math.pi * 0.95,
-            2,
-        )
+        # 鼻（三角じゃなく丸いおにぎり風）
+        nose_col = (85, 65, 75)
+        pygame.draw.ellipse(surf, nose_col, pygame.Rect(int(px - br * 0.10), int(py + br * 0.02), int(br * 0.20), int(br * 0.15)))
 
-        # ほっぺ
-        blush = (255, 120, 160)
-        pygame.draw.circle(surf, blush, (int(px - br * 0.72), int(py + br * 0.10)), max(2, int(2 * self.size)))
-        pygame.draw.circle(surf, blush, (int(px + br * 0.72), int(py + br * 0.10)), max(2, int(2 * self.size)))
+        # 口（小さく）
+        mx = int(px)
+        my = int(py + br * 0.20)
+        pygame.draw.line(surf, face_col, (mx - 5, my), (mx + 5, my), 2)
 
-        # 足（2本）
-        foot = (90, 90, 100)
-        fy = int(py + br * 0.90)
-        fx_off = int(br * 0.42)
-        fw = max(6, int(10 * self.size))
-        fh = max(4, int(6 * self.size))
+        # ほっぺ（薄め）
+        blush = (255, 155, 185)
+        b_r = max(2, int(2 * self.size))
+        pygame.draw.circle(surf, blush, (int(px - br * 0.58), int(py + br * 0.10)), b_r)
+        pygame.draw.circle(surf, blush, (int(px + br * 0.58), int(py + br * 0.10)), b_r)
+
+        # 足（ぷにっと短い）
+        foot = (90, 80, 95)
+        fy = int(py + br * 0.85)
+        fx_off = int(br * 0.45)
+        fw = max(7, int(12 * self.size))
+        fh = max(5, int(7 * self.size))
         pygame.draw.ellipse(surf, foot, pygame.Rect(int(px - fx_off - fw / 2), int(fy), fw, fh))
         pygame.draw.ellipse(surf, foot, pygame.Rect(int(px + fx_off - fw / 2), int(fy), fw, fh))
 
