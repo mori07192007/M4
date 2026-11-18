@@ -240,6 +240,12 @@ running = True
 game_clear = False
 
 # =========================
+# ステージ
+# =========================
+stage = 1
+STAGE_MAX = 3
+
+# =========================
 # タイトル（ルール説明）画面
 # =========================
 
@@ -285,7 +291,7 @@ def show_title_screen():
             "【敵とポイント】\n"
             "・赤ウイルス：HP1 / +1点\n"
             "・紫ウイルス：HP2 / +3点（速い）\n"
-            "・BOSS：HP3 / 倒すとCLEAR（出現：スコア15）\n"
+            "・BOSS：HP3 / 倒すとCLEAR（出現：ステージ3）\n"
             "※ウイルスが左端（PC）に到達するとHP減少\n"
             "\n"
             "【アイテム効果】\n"
@@ -312,9 +318,20 @@ show_title_screen()
 while running:
     clock.tick(60)
 
-    # 難易度上昇
+    # ---------------------
+    # ステージ進行
+    # ---------------------
+    # score は表示しないが、ステージ進行の内部値として使用
+    if score >= 30:
+        stage = 3
+    elif score >= 15:
+        stage = 2
+    else:
+        stage = 1
+
+    # 難易度上昇（時間経過＋ステージ）
     game_time = pygame.time.get_ticks() // 1000
-    speed_bonus = game_time // 60
+    speed_bonus = (game_time // 60) + (stage - 1)
 
     # ---------------------
     # イベント
@@ -361,15 +378,18 @@ while running:
     # ---------------------
     spawn_timer += 1
 
-    if spawn_timer >= 60:
+    # ステージが上がるほど出現頻度を上げる
+    spawn_interval = 70 if stage == 1 else 55 if stage == 2 else 42
+    if spawn_timer >= spawn_interval:
         r = random.randint(1, 100)
 
-        if score >= 15 and not boss_spawned:
+        # ステージ3でボス出現（1回だけ）
+        if stage >= 3 and not boss_spawned:
             viruses.append(
                 {
                     "x": WIDTH,
                     "y": HEIGHT // 2,
-                    "speed": 3,
+                    "speed": 3 + speed_bonus,
                     # ボス：スプレー3回以上必要になるくらい硬め
                     "hp": 3,
                     "type": "boss",
@@ -377,7 +397,7 @@ while running:
             )
             boss_spawned = True
 
-        elif r <= 75:
+        elif r <= (80 if stage == 1 else 65 if stage == 2 else 55):
             viruses.append(
                 {
                     "x": WIDTH,
@@ -396,7 +416,7 @@ while running:
                     "y": random.randint(50, 550),
                     "speed": 6 + speed_bonus,
                     # 強：スプレー2回分くらいで倒せる
-                    "hp": 2,
+                    "hp": 2 if stage < 3 else 3,
                     "type": "strong",
                 }
             )
@@ -557,6 +577,10 @@ while running:
                 virus["hp"] -= 1
                 hit = True
                 if virus["hp"] <= 0:
+                    # ボスを倒したらクリア
+                    if virus.get("type") == "boss":
+                        game_clear = True
+
                     viruses.remove(virus)
                     score += 1
                     speed_bonus = score // 5
@@ -564,6 +588,11 @@ while running:
                 break
         if hit:
             # 貫通させない（スプレーっぽく命中で消える）
+            projectiles.remove(p)
+
+    # 画面より左に行った弾も消す（後ろに行かないようにする）
+    for p in projectiles[:]:
+        if p["x"] < -50:
             projectiles.remove(p)
 
 
@@ -667,6 +696,9 @@ while running:
     screen.blit(font.render(f"HP {pc_hp}/{MAX_HP}", True, (0, 0, 0)), (hp_x + hp_w + 12, hp_y - 6))
     # SCORE表示は不要とのことなので非表示
 
+    # ステージ表示
+    screen.blit(font.render(f"STAGE {stage}/{STAGE_MAX}", True, (0, 0, 0)), (20, 60))
+
     # 必殺技ゲージ（HPと同じバー表現）
     gauge_x, gauge_y = 20, 100
     gauge_w, gauge_h = 240, 18
@@ -729,8 +761,8 @@ while running:
         if pt["timer"] <= 0:
             pickup_texts.remove(pt)
 
-    # クリア
-    if game_clear or score >= 20:
+    # クリア（ステージ3でボスを倒す or scoreが一定以上）
+    if game_clear or score >= 45:
         if pc_hp == 100:
             rank = "S"
         elif pc_hp >= 70:
