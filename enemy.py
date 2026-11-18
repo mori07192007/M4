@@ -261,6 +261,10 @@ class Virus:
         self.death_timer = 0.0
         self.remove = False
 
+        # プレイヤーに向けて菌/炎を撃つ（一定間隔）
+        self.shot_cd = random.uniform(0.9, 1.8)  # 初回は少しバラす
+        self.shot_interval = {"S": 1.35, "M": 1.10, "L": 0.85}.get(self.tier, 1.2)
+
         # 移動範囲（そのへんで反転）
         self.patrol_left = self.x - 140
         self.patrol_right = self.x + 140
@@ -333,7 +337,7 @@ class Virus:
             vy = math.sin(a) * 320
             projectiles.append(Projectile("flame", cx, self.y + 10, vx, vy))
 
-    def update(self, dt, projectiles, *, theme=None):
+    def update(self, dt, projectiles, *, theme=None, player=None):
         # 被弾（踏まれ）ひるみ
         if not hasattr(self, "hurt_timer"):
             self.hurt_timer = 0.0
@@ -348,6 +352,14 @@ class Virus:
                 self.remove = True
             return
 
+        # プレイヤーへ向けて発射（生存中のみ）
+        if player is not None:
+            self.shot_cd -= dt
+            if self.shot_cd <= 0:
+                self.shoot_at_player(projectiles, theme=theme, player=player)
+                # 次の発射まで（tierで短く）
+                self.shot_cd = self.shot_interval + random.uniform(-0.18, 0.22)
+
         # ひるみ中は動きを少し止める
         if self.hurt_timer <= 0:
             self.x += self.speed * self.dir * dt
@@ -360,6 +372,65 @@ class Virus:
 
         # 床に置く
         self.y = GROUND_Y - self.h
+
+    def shoot_at_player(self, projectiles, *, theme=None, player=None):
+        """生存中に、プレイヤーの方向へ菌 or 炎を発射する。"""
+        if player is None:
+            return
+
+        cx = self.x + self.w / 2
+        cy = self.y + self.h * 0.35
+
+        # プレイヤーの中心に向ける
+        px = player.x + player.w / 2
+        py = player.y + player.h / 2
+        dx = px - cx
+        dy = py - cy
+        dist = math.hypot(dx, dy)
+        if dist < 1e-6:
+            return
+        nx = dx / dist
+        ny = dy / dist
+
+        # Lは炎を混ぜやすい、Sは菌メイン
+        flame_chance = {"S": 0.12, "M": 0.22, "L": 0.40}.get(self.tier, 0.2)
+        shoot_flame = random.random() < flame_chance
+
+        if shoot_flame:
+            sp = 260.0
+            # 炎は少し上向きにして放物線
+            projectiles.append(Projectile("flame", cx, cy, nx * sp, ny * sp - 120.0))
+            return
+
+        # 菌：テーマに合わせて色/顔を付与
+        if theme is None:
+            kind = random.choice(["cute", "evil", "spore"])
+            palette = None
+            face = None
+        else:
+            kind = weighted_choice(theme["weights"])
+            palette = theme.get("palette")
+            face_list = theme.get("faces", {}).get(kind, [None])
+            face = random.choice(face_list) if face_list else None
+
+        sp = {"S": 255.0, "M": 275.0, "L": 300.0}.get(self.tier, 270.0)
+        # 少しばらけさせる
+        jitter = 0.10
+        ang = math.atan2(ny, nx) + random.uniform(-jitter, jitter)
+        vx = math.cos(ang) * sp
+        vy = math.sin(ang) * sp
+        projectiles.append(
+            Projectile(
+                "germ",
+                cx,
+                cy,
+                vx,
+                vy,
+                germ_kind=kind,
+                palette=palette,
+                face=face,
+            )
+        )
 
     def draw(self, surf, cam_x):
         cx = self.x + self.w / 2
@@ -435,19 +506,6 @@ class Virus:
         blush = (255, 120, 160)
         pygame.draw.circle(surf, blush, (int(px - bw * 0.22), int(py + bh * 0.00)), max(2, int(2 * self.size)))
         pygame.draw.circle(surf, blush, (int(px + bw * 0.22), int(py + bh * 0.00)), max(2, int(2 * self.size)))
-
-        # 角/トサカっぽいパーツ（独自デザイン）
-        horn = (250, 245, 150) if self.tier != "L" else (230, 210, 255)
-        top_y = body_rect.top + int(bh * 0.12)
-        pygame.draw.polygon(
-            surf,
-            horn,
-            [
-                (int(px), int(top_y - 10 * self.size)),
-                (int(px - 10 * self.size), int(top_y + 6 * self.size)),
-                (int(px + 10 * self.size), int(top_y + 6 * self.size)),
-            ],
-        )
 
         # 足（2本）
         foot = (90, 90, 100)
@@ -573,7 +631,7 @@ def main():
 
         # 敵更新（死ぬときにこの区画のテーマで菌を出す）
         for v in viruses:
-            v.update(dt, projectiles, theme=theme)
+            v.update(dt, projectiles, theme=theme, player=player)
         viruses = [v for v in viruses if not v.remove]
 
         # 踏み判定
