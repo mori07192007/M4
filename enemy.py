@@ -373,6 +373,12 @@ class Virus:
 
         # プレイヤーへ向けて発射（生存中のみ）
         if player is not None:
+            # 近いと照れる（ほっぺ濃くする）
+            self._player_dist = math.hypot(
+                (player.x + player.w / 2) - (self.x + self.w / 2),
+                (player.y + player.h / 2) - (self.y + self.h / 2),
+            )
+
             self.shot_cd -= dt
             if self.shot_cd <= 0:
                 self.shoot_at_player(projectiles, theme=theme, player=player)
@@ -539,7 +545,19 @@ class Virus:
         pygame.draw.line(surf, face_col, (mx - 5, my), (mx + 5, my), 2)
 
         # ほっぺ（薄め）
-        blush = (255, 155, 185)
+        # ほっぺ：プレイヤーが近いほど濃く（照れ）
+        dist = getattr(self, "_player_dist", 9999.0)
+        # 近い=500px以内で徐々に濃く
+        t = clamp(1.0 - (dist / 520.0), 0.0, 1.0)
+        # 強すぎると変なので控えめに
+        t = t * 0.85
+        blush_base = (255, 155, 185)
+        # 濃く＝少し赤みを足す
+        blush = (
+            int(blush_base[0]),
+            int(blush_base[1] * (1.0 - 0.25 * t)),
+            int(blush_base[2] * (1.0 - 0.30 * t)),
+        )
         b_r = max(2, int(2 * self.size))
         pygame.draw.circle(surf, blush, (int(px - br * 0.58), int(py + br * 0.10)), b_r)
         pygame.draw.circle(surf, blush, (int(px + br * 0.58), int(py + br * 0.10)), b_r)
