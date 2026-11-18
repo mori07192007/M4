@@ -160,6 +160,9 @@ MAX_HP = 100
 # PC被弾エフェクト用
 pc_hit_timer = 0
 
+# PCに当たった時に表示するダメージ数字（フローティングテキスト）
+damage_texts = []  # {"text": str, "x": float, "y": float, "vy": float, "timer": int}
+
 # =========================
 # スコア
 # =========================
@@ -169,7 +172,10 @@ score = 0
 # 必殺技ゲージ
 # =========================
 special_gauge = 0
-MAX_GAUGE = 5
+# 必殺技ゲージ（HPのようにバー表示にする）
+MAX_GAUGE = 100
+GAUGE_GAIN_PER_KILL = 8
+GAUGE_GAIN_PER_SECOND = 0.6
 
 # =========================
 # ウイルス
@@ -448,13 +454,25 @@ while running:
 
         if virus["x"] < 70:
             if virus["type"] == "boss":
-                pc_hp -= 30
+                dmg = 30
             elif virus["type"] == "strong":
-                pc_hp -= 15
+                dmg = 15
             else:
-                pc_hp -= 10
+                dmg = 10
 
+            pc_hp -= dmg
             pc_hit_timer = PC_HIT_EFFECT_FRAMES
+
+            # PC上にダメージ表示
+            damage_texts.append(
+                {
+                    "text": f"-{dmg}",
+                    "x": 60,
+                    "y": 220,
+                    "vy": -0.7,
+                    "timer": 40,
+                }
+            )
 
             viruses.remove(virus)
 
@@ -515,7 +533,7 @@ while running:
                     viruses.remove(virus)
                     score += 1
                     speed_bonus = score // 5
-                    special_gauge = min(MAX_GAUGE, special_gauge + 1)
+                    special_gauge = min(MAX_GAUGE, special_gauge + GAUGE_GAIN_PER_KILL)
                 break
         if hit:
             # 貫通させない（スプレーっぽく命中で消える）
@@ -538,6 +556,11 @@ while running:
     # 描画
     # ---------------------
     screen.fill((220, 240, 255))
+
+    # ---------------------
+    # 必殺技ゲージ（時間でもじわじわ貯まる）
+    # ---------------------
+    special_gauge = min(MAX_GAUGE, special_gauge + GAUGE_GAIN_PER_SECOND / 60.0)
 
     # PC被弾エフェクト（点滅＋微振動）
     if pc_hit_timer > 0:
@@ -599,10 +622,29 @@ while running:
 
     screen.blit(font.render(f"HP {pc_hp}/{MAX_HP}", True, (0, 0, 0)), (hp_x + hp_w + 12, hp_y - 6))
     screen.blit(font.render(f"SCORE: {score}", True, (0, 0, 0)), (20, 60))
-    screen.blit(
-        font.render(f"GAUGE: {special_gauge}/{MAX_GAUGE}", True, (0, 0, 0)),
-        (20, 100),
-    )
+
+    # 必殺技ゲージ（HPと同じバー表現）
+    gauge_x, gauge_y = 20, 100
+    gauge_w, gauge_h = 240, 18
+    pygame.draw.rect(screen, (30, 30, 30), (gauge_x - 2, gauge_y - 2, gauge_w + 4, gauge_h + 4), border_radius=6)
+    pygame.draw.rect(screen, (220, 220, 220), (gauge_x, gauge_y, gauge_w, gauge_h), border_radius=5)
+    g_ratio = max(0.0, min(1.0, special_gauge / MAX_GAUGE))
+    g_fill = int(gauge_w * g_ratio)
+    if g_fill > 0:
+        pygame.draw.rect(screen, (120, 90, 255), (gauge_x, gauge_y, g_fill, gauge_h), border_radius=5)
+    screen.blit(font.render(f"SPECIAL {int(special_gauge)}/{MAX_GAUGE}", True, (0, 0, 0)), (gauge_x + gauge_w + 12, gauge_y - 10))
+
+    # ダメージ数字（PCの上に浮かぶ）
+    for dt in damage_texts[:]:
+        dt["y"] += dt["vy"]
+        dt["timer"] -= 1
+        # だんだん薄く
+        alpha = max(0, min(255, int(255 * (dt["timer"] / 40))))
+        surf = font.render(dt["text"], True, (255, 0, 0))
+        surf.set_alpha(alpha)
+        screen.blit(surf, (int(dt["x"]), int(dt["y"])))
+        if dt["timer"] <= 0:
+            damage_texts.remove(dt)
 
     # クリア
     if game_clear or score >= 20:
