@@ -230,6 +230,9 @@ SPRAY_RADIUS = 6           # 弾の半径
 
 projectiles = []  # {"x","y","vx","vy","r"}
 
+# スプレーが「最初に当たった敵」より奥に届かないようにするための壁（X座標）
+spray_block_x = None
+
 # ウイルスがPC(左側)に向かってカーブして寄っていく強さ
 VIRUS_CURVE_STRENGTH = 0.08  # 大きいほどY方向に吸い寄せられる
 
@@ -362,6 +365,7 @@ while running:
             if event.key == pygame.K_SPACE:
                 attack = True
                 attack_timer = SPRAY_DURATION_FRAMES
+                spray_block_x = None
 
             # 必殺技
             if event.key == pygame.K_RETURN:
@@ -576,6 +580,7 @@ while running:
 
         if attack_timer <= 0:
             attack = False
+            spray_block_x = None
 
     # ---------------------
     # 弾の更新＆当たり判定
@@ -583,6 +588,11 @@ while running:
     for p in projectiles[:]:
         p["x"] += p["vx"]
         p["y"] += p["vy"]
+
+        # スプレーの「壁」より奥へ行かせない（最初に当たった敵で止まる）
+        if spray_block_x is not None and p["x"] >= spray_block_x:
+            projectiles.remove(p)
+            continue
 
         # 画面外は削除
         if p["x"] > WIDTH + 50 or p["y"] < -50 or p["y"] > HEIGHT + 50:
@@ -596,6 +606,10 @@ while running:
         for virus in viruses[:]:
             virus_rect = pygame.Rect(virus["x"] - 25, virus["y"] - 25, 50, 50)
             if bullet_rect.colliderect(virus_rect):
+                # この攻撃中は、この敵の手前で弾が止まる（以後の弾は奥に行かない）
+                if spray_block_x is None:
+                    spray_block_x = virus["x"]
+
                 virus["hp"] -= 1
                 hit = True
                 if virus["hp"] <= 0:
