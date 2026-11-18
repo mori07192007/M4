@@ -834,8 +834,28 @@ while running:
 
     # ゲームオーバー
     if pc_hp <= 0:
-        screen.blit(big_font.render("GAME OVER", True, (255, 0, 0)), (180, 250))
-        screen.blit(font.render("クリック/Enterで終了", True, (0, 0, 0)), (360, 330))
+        # 感染っぽい演出（緑のモヤ＋ノイズ＋WARNING）
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((40, 220, 80, 70))
+        screen.blit(overlay, (0, 0))
+
+        # PC周辺にランダムな感染スポット
+        for _ in range(90):
+            rx = random.randint(0, 160)
+            ry = random.randint(200, 380)
+            r = random.randint(2, 8)
+            col = (0, random.randint(150, 255), 0, random.randint(40, 120))
+            pygame.draw.circle(screen, col, (rx, ry), r)
+
+        # 画面ノイズ
+        for _ in range(120):
+            nx = random.randint(0, WIDTH - 1)
+            ny = random.randint(0, HEIGHT - 1)
+            pygame.draw.rect(screen, (0, 255, 80), (nx, ny, 2, 2))
+
+        screen.blit(big_font.render("INFECTED", True, (0, 130, 0)), (240, 210))
+        screen.blit(big_font.render("GAME OVER", True, (255, 0, 0)), (180, 280))
+        screen.blit(font.render("Click / Enter to Exit", True, (0, 0, 0)), (340, 350))
 
         pygame.display.flip()
 
