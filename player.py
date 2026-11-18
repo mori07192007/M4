@@ -164,7 +164,7 @@ pc_hit_timer = 0
 damage_texts = []  # {"text": str, "x": float, "y": float, "vy": float, "timer": int}
 
 # =========================
-# スコア
+# スコア（表示しないが、内部の進行条件には使う）
 # =========================
 score = 0
 
@@ -621,7 +621,7 @@ while running:
         pygame.draw.rect(screen, hp_color, (hp_x, hp_y, fill_w, hp_h), border_radius=5)
 
     screen.blit(font.render(f"HP {pc_hp}/{MAX_HP}", True, (0, 0, 0)), (hp_x + hp_w + 12, hp_y - 6))
-    screen.blit(font.render(f"SCORE: {score}", True, (0, 0, 0)), (20, 60))
+    # SCORE表示は不要とのことなので非表示
 
     # 必殺技ゲージ（HPと同じバー表現）
     gauge_x, gauge_y = 20, 100
@@ -633,6 +633,12 @@ while running:
     if g_fill > 0:
         pygame.draw.rect(screen, (120, 90, 255), (gauge_x, gauge_y, g_fill, gauge_h), border_radius=5)
     screen.blit(font.render(f"SPECIAL {int(special_gauge)}/{MAX_GAUGE}", True, (0, 0, 0)), (gauge_x + gauge_w + 12, gauge_y - 10))
+
+    # ゲージがMAXになったら案内を表示
+    if special_gauge >= MAX_GAUGE:
+        if (pygame.time.get_ticks() // 300) % 2 == 0:
+            ready = font.render("PUSH ENTER!", True, (120, 0, 200))
+            screen.blit(ready, (gauge_x, gauge_y + 26))
 
     # ダメージ数字（PCの上に浮かぶ）
     for dt in damage_texts[:]:
