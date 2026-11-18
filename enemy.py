@@ -372,30 +372,91 @@ class Virus:
             sx = 1 + p * 0.25
             sy = 1 - p * 0.55
 
+        # --- Character-like enemy look (not a real-world clone) ---
+        # 丸い“ウイルス”感は減らして、かわいい敵キャラっぽいシルエットにする
         r = min(self.w, self.h) * 0.45
-        # tierごとに本体色を変える（強さが分かりやすい）
+
+        # tierごとにカラー（分かりやすい）
         body = {
-            "S": (124, 255, 169),
-            "M": (255, 220, 120),
-            "L": (255, 150, 150),
-        }.get(self.tier, (124, 255, 169))
+            "S": (155, 235, 180),
+            "M": (255, 210, 120),
+            "L": (255, 160, 160),
+        }.get(self.tier, (155, 235, 180))
+        outline = (35, 35, 45)
+        belly = (245, 245, 245)
 
         # ひるみ中は明るく点滅
         if getattr(self, "hurt_timer", 0.0) > 0:
-            body = (min(255, body[0] + 50), min(255, body[1] + 50), min(255, body[2] + 50))
-        spike = (42, 224, 122)
+            body = (min(255, body[0] + 45), min(255, body[1] + 45), min(255, body[2] + 45))
 
-        rect = pygame.Rect(0, 0, int(r * 2 * sx), int(r * 2 * sy))
-        rect.center = (int(cx - cam_x), int(cy))
-        pygame.draw.ellipse(surf, body, rect)
+        px = cx - cam_x
+        py = cy
 
-        for i in range(10):
-            a = i * (math.pi * 2 / 10)
-            x1 = (cx - cam_x) + math.cos(a) * r
-            y1 = cy + math.sin(a) * r
-            x2 = (cx - cam_x) + math.cos(a) * (r + 10 * self.size)
-            y2 = cy + math.sin(a) * (r + 10 * self.size)
-            pygame.draw.line(surf, spike, (x1, y1), (x2, y2), 3)
+        # 体（少し縦長の楕円）
+        bw = int(r * 2.1 * sx)
+        bh = int(r * 2.35 * sy)
+        body_rect = pygame.Rect(0, 0, bw, bh)
+        body_rect.center = (int(px), int(py))
+        pygame.draw.ellipse(surf, outline, body_rect.inflate(6, 6))
+        pygame.draw.ellipse(surf, body, body_rect)
+
+        # お腹
+        belly_rect = body_rect.inflate(-bw * 0.35, -bh * 0.35)
+        belly_rect.centery += int(bh * 0.10)
+        pygame.draw.ellipse(surf, belly, belly_rect)
+
+        # 目（大きめ）
+        eye_white = (255, 255, 255)
+        eye_black = (25, 25, 35)
+        ex_off = int(bw * 0.16)
+        ey_off = int(-bh * 0.10)
+        eye_r = max(3, int(5 * self.size))
+        for sgn in (-1, 1):
+            ex = int(px + sgn * ex_off)
+            ey = int(py + ey_off)
+            pygame.draw.circle(surf, eye_white, (ex, ey), eye_r + 2)
+            pygame.draw.circle(surf, eye_black, (ex, ey), eye_r)
+            pygame.draw.circle(surf, (255, 255, 255), (ex - 1, ey - 1), max(1, eye_r // 2))
+
+        # 口
+        mouth_col = (60, 40, 40)
+        mw = int(bw * 0.22)
+        mh = int(bh * 0.10)
+        pygame.draw.arc(
+            surf,
+            mouth_col,
+            pygame.Rect(int(px - mw / 2), int(py + bh * 0.05), mw, mh),
+            math.pi * 0.05,
+            math.pi * 0.95,
+            2,
+        )
+
+        # ほっぺ
+        blush = (255, 120, 160)
+        pygame.draw.circle(surf, blush, (int(px - bw * 0.22), int(py + bh * 0.00)), max(2, int(2 * self.size)))
+        pygame.draw.circle(surf, blush, (int(px + bw * 0.22), int(py + bh * 0.00)), max(2, int(2 * self.size)))
+
+        # 角/トサカっぽいパーツ（独自デザイン）
+        horn = (250, 245, 150) if self.tier != "L" else (230, 210, 255)
+        top_y = body_rect.top + int(bh * 0.12)
+        pygame.draw.polygon(
+            surf,
+            horn,
+            [
+                (int(px), int(top_y - 10 * self.size)),
+                (int(px - 10 * self.size), int(top_y + 6 * self.size)),
+                (int(px + 10 * self.size), int(top_y + 6 * self.size)),
+            ],
+        )
+
+        # 足（2本）
+        foot = (90, 90, 100)
+        fy = body_rect.bottom - int(6 * self.size)
+        fx_off = int(bw * 0.18)
+        fw = max(6, int(10 * self.size))
+        fh = max(4, int(6 * self.size))
+        pygame.draw.ellipse(surf, foot, pygame.Rect(int(px - fx_off - fw / 2), int(fy), fw, fh))
+        pygame.draw.ellipse(surf, foot, pygame.Rect(int(px + fx_off - fw / 2), int(fy), fw, fh))
 
 # =========================================================
 # Player
