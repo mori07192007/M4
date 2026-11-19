@@ -3,3 +3,9 @@
 実行するときのコード
 cd /home/moe7514/M4
 python -m game.main
+
+試してもらいたいこと
+git clone https://github.com/ninomiyamoe/M4.git
+cd M4
+pip install -r requirements.txt
+python -m game.main
